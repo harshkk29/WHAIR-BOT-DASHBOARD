@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv
+env/
+venv/
+.env
+
+# Streamlit/Cache
+.streamlit/
+.cache.sqlite
+.cache/
+
+# OS
+.DS_Store
+
+# User Specific
+api.text
+*.zip
+*.mov
+*.csv
