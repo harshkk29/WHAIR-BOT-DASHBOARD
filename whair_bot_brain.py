@@ -57,31 +57,38 @@ class WhairBrain:
 
     def log_weather_to_db(self, city, weather_data, aq_data):
         """Method 1: RAG - Build a historical library of data with rich features"""
-        if aq_data is None:
-            aq_data = {}
+        try:
+            # Deep safety: Ensure inputs are usable as dicts
+            w_data = weather_data if isinstance(weather_data, dict) else {}
+            a_data = aq_data if isinstance(aq_data, dict) else {}
 
-        new_entry = {
-            'timestamp': pd.Timestamp.now(),
-            'city': city,
-            'temp': weather_data.get('temperature_2m'),
-            'humidity': weather_data.get('relative_humidity_2m'),
-            'wind_speed': weather_data.get('wind_speed_10m'),
-            'weather_code': weather_data.get('weather_code'),
-            'aqi': aq_data.get('us_aqi'),
-            'source': aq_data.get('highest_pollutant')
-        }
-        
-        # If source is missing, find the highest value among common pollutants
-        if aq_data and not new_entry['source']:
-            pollutants = {k: aq_data.get(k, 0) for k in ['pm2_5', 'pm10', 'no2', 'so2', 'o3', 'co']}
-            if any(pollutants.values()):
-                new_entry['source'] = max(pollutants, key=pollutants.get).upper()
-        
-        df = pd.DataFrame([new_entry])
-        if not os.path.exists(HISTORY_FILE):
-             df.to_csv(HISTORY_FILE, index=False)
-        else:
-            df.to_csv(HISTORY_FILE, mode='a', header=False, index=False)
+            new_entry = {
+                'timestamp': pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'city': str(city),
+                'temp': w_data.get('temperature_2m'),
+                'humidity': w_data.get('relative_humidity_2m'),
+                'wind_speed': w_data.get('wind_speed_10m'),
+                'weather_code': w_data.get('weather_code'),
+                'aqi': a_data.get('us_aqi'),
+                'source': a_data.get('highest_pollutant')
+            }
+            
+            # Fallback for source if missing
+            if not new_entry['source'] and a_data:
+                pollutants = {k: a_data.get(k, 0) for k in ['pm2_5', 'pm10', 'no2', 'so2', 'o3', 'co']}
+                if any(v > 0 for v in pollutants.values()):
+                    new_entry['source'] = max(pollutants, key=pollutants.get).upper()
+            
+            df = pd.DataFrame([new_entry])
+            
+            # Use explicit header writing to prevent column mismatch
+            if not os.path.exists(HISTORY_FILE):
+                df.to_csv(HISTORY_FILE, index=False)
+            else:
+                df.to_csv(HISTORY_FILE, mode='a', header=False, index=False)
+        except Exception as e:
+            # Silently fail or log to console to prevent dashboard crash
+            print(f"Logging Error: {e}")
 
     def get_historical_trends(self, city):
         """Method 4: Tool for the agent to look up past data"""
@@ -90,12 +97,15 @@ class WhairBrain:
         
         try:
             df = pd.read_csv(HISTORY_FILE)
-            city_df = df[df['city'].str.lower() == city.lower()].tail(5)
+            if 'city' not in df.columns:
+                return "History database format is outdated."
+            
+            city_df = df[df['city'].str.lower() == str(city).lower()].tail(5)
             if city_df.empty:
                 return f"No history for {city}."
             return city_df.to_string()
-        except Exception:
-            return "Error reading history database."
+        except Exception as e:
+            return f"Error reading history: {e}"
 
 # --- TOOL DEFINITIONS ---
 def get_weather_tools():
