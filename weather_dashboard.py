@@ -12,7 +12,7 @@ import requests
 import folium
 from folium.plugins import HeatMap
 import numpy as np
-from streamlit_folium import folium_static, st_folium
+from streamlit_folium import st_folium
 from whair_bot_brain import WhairBrain, get_weather_tools
 import json
 
@@ -224,7 +224,7 @@ def perform_pmf_analysis(aq_data):
     Simulate PMF Analysis to identify pollution sources based on pollutant ratios.
     This is a heuristic estimation since real PMF requires chemical speciation.
     """
-    if not aq_data: return None
+    if not aq_data: return None, "N/A"
     
     # Heuristic Source Profiles (Arbitrary Units based on typical urban composition)
     # Traffic: High NO2, CO
@@ -232,10 +232,10 @@ def perform_pmf_analysis(aq_data):
     # Dust: High PM10
     # Secondary: High Ozone
     
-    traffic_score = (aq_data['no2'] / 20) + (aq_data['co'] / 500)
-    industry_score = (aq_data['so2'] / 10) + (aq_data['pm2_5'] / 25)
-    dust_score = (aq_data['pm10'] / 50)
-    secondary_score = (aq_data['o3'] / 60)
+    traffic_score = (aq_data.get('nitrogen_dioxide', 0) / 20) + (aq_data.get('carbon_monoxide', 0) / 500)
+    industry_score = (aq_data.get('sulphur_dioxide', 0) / 10) + (aq_data.get('pm2_5', 0) / 25)
+    dust_score = (aq_data.get('pm10', 0) / 50)
+    secondary_score = (aq_data.get('ozone', 0) / 60)
     
     total_score = traffic_score + industry_score + dust_score + secondary_score + 0.001
     
@@ -248,12 +248,12 @@ def perform_pmf_analysis(aq_data):
     
     # Identify highest pollutant
     pollutants = {
-        "PM2.5": aq_data['pm2_5'],
-        "PM10": aq_data['pm10'],
-        "NO2": aq_data['no2'],
-        "SO2": aq_data['so2'],
-        "Ozone": aq_data['o3'],
-        "CO": aq_data['co']
+        "PM2.5": aq_data.get('pm2_5', 0),
+        "PM10": aq_data.get('pm10', 0),
+        "NO2": aq_data.get('nitrogen_dioxide', 0),
+        "SO2": aq_data.get('sulphur_dioxide', 0),
+        "Ozone": aq_data.get('ozone', 0),
+        "CO": aq_data.get('carbon_monoxide', 0)
     }
     highest_pollutant = max(pollutants, key=pollutants.get)
     
@@ -429,7 +429,7 @@ if fetch_btn or city: # Auto-load on start if default city is present
                     
                     folium.Marker([lat, lon], popup=f"<b>{city}</b>", icon=folium.Icon(color='red', icon='info-sign')).add_to(m)
                     folium.LayerControl().add_to(m)
-                    folium_static(m, height=400)
+                    st_folium(m, height=400, width='stretch')
                     st.markdown(legend_html, unsafe_allow_html=True)
                     st.markdown("---")
                     st.markdown("---")
@@ -481,7 +481,7 @@ if fetch_btn or city: # Auto-load on start if default city is present
                     plot_bgcolor='rgba(0,0,0,0)',
                     font=dict(color='gray')
                 )
-                st.plotly_chart(fig_hourly, use_container_width=True)
+                st.plotly_chart(fig_hourly, width='stretch')
 
                 st.markdown("---")
 
@@ -543,7 +543,7 @@ if fetch_btn or city: # Auto-load on start if default city is present
                         showlegend=True,
                         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
                     )
-                    st.plotly_chart(fig_sarimax, use_container_width=True)
+                    st.plotly_chart(fig_sarimax, width='stretch')
 
                 st.markdown("---")
 
@@ -613,7 +613,7 @@ if fetch_btn or city: # Auto-load on start if default city is present
                                 paper_bgcolor='rgba(0,0,0,0)',
                                 plot_bgcolor='rgba(0,0,0,0)'
                             )
-                            st.plotly_chart(fig_pmf, use_container_width=True)
+                            st.plotly_chart(fig_pmf, width='stretch')
 
                         # --- NEW: 4 POLLUTANT MAPS GRID ---
                         st.markdown("#### 🗺️ Pollutant Distribution Maps")
@@ -642,20 +642,20 @@ if fetch_btn or city: # Auto-load on start if default city is present
                         with pm_col1:
                             st.markdown("<h5 style='text-align: center;'>PM2.5 Distribution</h5>", unsafe_allow_html=True)
                             map1 = create_mini_map("PM2.5", aq_data['pm2_5'], 35) # WHO guideline 
-                            folium_static(map1, height=250)
+                            st_folium(map1, height=250, width='stretch', key="pm25_map")
                             
                             st.markdown("<h5 style='text-align: center;'>Ozone (O3) Distribution</h5>", unsafe_allow_html=True)
                             map3 = create_mini_map("O3", aq_data['o3'], 100)
-                            folium_static(map3, height=250)
+                            st_folium(map3, height=250, width='stretch', key="o3_map")
 
                         with pm_col2:
                             st.markdown("<h5 style='text-align: center;'>NO2 Hotspots</h5>", unsafe_allow_html=True)
                             map2 = create_mini_map("NO2", aq_data['no2'], 40)
-                            folium_static(map2, height=250)
+                            st_folium(map2, height=250, width='stretch', key="no2_map")
                             
                             st.markdown("<h5 style='text-align: center;'>CO Concentration</h5>", unsafe_allow_html=True)
                             map4 = create_mini_map("CO", aq_data['co'], 4000)
-                            folium_static(map4, height=250)
+                            st_folium(map4, height=250, width='stretch', key="co_map")
 
                         col_p1, col_p2, col_p3 = st.columns(3)
                         with col_p1:
