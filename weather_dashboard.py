@@ -309,599 +309,614 @@ with st.sidebar:
     
     fetch_btn = st.button("🔄 Update Weather", type="primary")
 
-if 'data_fetched' not in st.session_state:
-    st.session_state.data_fetched = False
+# Initialize session state for persistence
+if 'current' not in st.session_state: st.session_state.current = None
+if 'hourly' not in st.session_state: st.session_state.hourly = None
+if 'daily' not in st.session_state: st.session_state.daily = None
+if 'aq_data' not in st.session_state: st.session_state.aq_data = None
+if 'lat' not in st.session_state: st.session_state.lat = None
+if 'lon' not in st.session_state: st.session_state.lon = None
+if 'data_fetched' not in st.session_state: st.session_state.data_fetched = False
 
+# Fetch trigger: Button click, form submission, or initial load
 if fetch_btn or submitted or not st.session_state.data_fetched:
     # 1. Geocoding
-    lat, lon = get_lat_lon(city, country, OPENWEATHER_API_KEY)
+    st.session_state.lat, st.session_state.lon = get_lat_lon(city, country, OPENWEATHER_API_KEY)
     
-    if lat and lon:
+    if st.session_state.lat and st.session_state.lon:
         # 2. Fetch Weather Data
-        current, hourly, daily = get_weather_data(lat, lon)
+        st.session_state.current, st.session_state.hourly, st.session_state.daily = get_weather_data(st.session_state.lat, st.session_state.lon)
+        # 3. Fetch Air Quality
+        st.session_state.aq_data = get_air_quality_data(st.session_state.lat, st.session_state.lon)
+        
+        # Log to historical DB for RAG (Method 1)
+        if st.session_state.current and st.session_state.aq_data:
+            brain.log_weather_to_db(city, st.session_state.current, st.session_state.aq_data)
+        
         st.session_state.data_fetched = True
+
+# --- UI RENDERING (From Session State) ---
+if st.session_state.data_fetched and st.session_state.current is not None:
+    current = st.session_state.current
+    hourly = st.session_state.hourly
+    daily = st.session_state.daily
+    aq_data = st.session_state.aq_data
+    lat = st.session_state.lat
+    lon = st.session_state.lon
+    # --- ALERTS SECTION ---
+    if show_alerts:
+        alerts = []
+        if current.get('wind_speed_10m', 0) > 40:
+            alerts.append("⚠️ High Wind Warning: Gusts over 40 km/h")
+        if current.get('precipitation', 0) > 10:
+            alerts.append("🌧️ Heavy Rain Alert: Potential for localized flooding")
+        if (current.get('temperature_2m') or 0) > 35:
+            alerts.append("🌡️ Heat Advisory: High temperatures detected")
+        if (current.get('temperature_2m') or 0) < 0:
+             alerts.append("❄️ Frost Warning: Temperatures below freezing")
+        for alert in alerts:
+            st.warning(alert, icon="⚠️")
+
+    # --- SECTION 1: TODAY'S UPDATE ---
+    st.subheader(f"📅 Today's Update: {city}, {country}")
+    st.caption(f"Coordinates: {lat:.4f}°N, {lon:.4f}°E | Loaded at {datetime.now().strftime('%H:%M')}")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("Temperature", f"{current.get('temperature_2m', 0):.1f}°C", f"Feels like {current.get('apparent_temperature', 0):.1f}°C")
+    with col2:
+        st.metric("Condition", f"{get_weather_icon(current.get('weather_code', 0))} {get_weather_description(current.get('weather_code', 0))}")
+    with col3:
+        st.metric("Humidity", f"{current.get('relative_humidity_2m', 0):.0f}%")
+    with col4:
+        st.metric("Wind", f"{current.get('wind_speed_10m', 0):.1f} km/h", f"Dir: {current.get('wind_direction_10m', 0):.0f}°")
+
+        st.markdown("---")
+
+        # --- SECTION 2: RADAR MAP (If Enabled) ---
+        if show_radar:
+            st.markdown(f"### 📡 Weather Radar: {radar_option}")
+            m = folium.Map(location=[lat, lon], zoom_start=10)
+            folium.TileLayer('OpenStreetMap').add_to(m)
             
-        if current and hourly is not None:
-            # Log to historical DB for RAG (Method 1)
-            aq_data = get_air_quality_data(lat, lon)
-            brain.log_weather_to_db(city, current, aq_data)
+            heat_data = []
+            gradient = {}
+            legend_html = ""
             
-            # --- ALERTS SECTION ---
-            if show_alerts:
-                # Simulated alerts logic (Open-Meteo alerts are separate endpoint, simulating for demo)
-                alerts = []
-                if current.get('wind_speed_10m', 0) > 40:
-                    alerts.append("⚠️ High Wind Warning: Gusts over 40 km/h")
-                if current.get('precipitation', 0) > 10:
-                    alerts.append("🌧️ Heavy Rain Alert: Potential for localized flooding")
-                if (current.get('temperature_2m') or 0) > 35:
-                    alerts.append("🌡️ Heat Advisory: High temperatures detected")
-                if (current.get('temperature_2m') or 0) < 0:
-                     alerts.append("❄️ Frost Warning: Temperatures below freezing")
-                     
-                for alert in alerts:
-                    st.warning(alert, icon="⚠️")
-            
-            # --- SECTION 1: TODAY'S UPDATE ---
-            st.subheader(f"📅 Today's Update: {city}, {country}")
-            st.caption(f"Coordinates: {lat:.4f}°N, {lon:.4f}°E | Loaded at {datetime.now().strftime('%H:%M')}")
-            
-            col1, col2, col3, col4 = st.columns(4)
-            
-            with col1:
-                st.metric("Temperature", f"{current.get('temperature_2m', 0):.1f}°C", f"Feels like {current.get('apparent_temperature', 0):.1f}°C")
-            with col2:
-                st.metric("Condition", f"{get_weather_icon(current.get('weather_code', 0))} {get_weather_description(current.get('weather_code', 0))}")
-            with col3:
-                st.metric("Humidity", f"{current.get('relative_humidity_2m', 0):.0f}%")
-            with col4:
-                st.metric("Wind", f"{current.get('wind_speed_10m', 0):.1f} km/h", f"Dir: {current.get('wind_direction_10m', 0):.0f}°")
-
-                st.markdown("---")
-
-                # --- SECTION 2: RADAR MAP (If Enabled) ---
-                if show_radar:
-                    st.markdown(f"### 📡 Weather Radar: {radar_option}")
-                    m = folium.Map(location=[lat, lon], zoom_start=10)
-                    folium.TileLayer('OpenStreetMap').add_to(m)
-                    
-                    heat_data = []
-                    gradient = {}
-                    legend_html = ""
-                    
-                    if radar_option == "Precipitation":
-                        # Simulate clusters (Storms)
-                        for _ in range(3):
-                            c_lat = lat + np.random.uniform(-0.1, 0.1)
-                            c_lon = lon + np.random.uniform(-0.1, 0.1)
-                            for _ in range(100):
-                                p_lat = c_lat + np.random.normal(0, 0.02)
-                                p_lon = c_lon + np.random.normal(0, 0.02)
-                                heat_data.append([p_lat, p_lon, np.random.uniform(0.5, 1.0)])
-                        
-                        gradient = {0.4: 'blue', 0.65: 'lime', 1: 'red'}
-                        legend_html = """
-                        <div style="background-color: white; padding: 10px; border-radius: 5px; border: 1px solid #ddd; margin-top: -10px; margin-bottom: 20px;">
-                            <span style="font-weight: bold;">Intensity:</span>
-                            <span style="color: blue; margin-left: 10px;">■ Low</span>
-                            <span style="color: lime; margin-left: 10px;">■ Moderate</span>
-                            <span style="color: red; margin-left: 10px;">■ High</span>
-                        </div>
-                        """
-
-                    elif radar_option == "Temperature":
-                        # Simulate Temperature Field (Smooth)
-                        # Blue (Cold) -> Yellow (Mild) -> Red (Hot)
-                        for _ in range(200):
-                            p_lat = lat + np.random.normal(0, 0.08)
-                            p_lon = lon + np.random.normal(0, 0.08)
-                            heat_data.append([p_lat, p_lon, np.random.uniform(0.4, 0.8)])
-                            
-                        gradient = {0.2: 'blue', 0.5: 'yellow', 1.0: 'red'}
-                        legend_html = """
-                        <div style="background-color: white; padding: 10px; border-radius: 5px; border: 1px solid #ddd; margin-top: -10px; margin-bottom: 20px;">
-                            <span style="font-weight: bold;">Temperature:</span>
-                            <span style="color: blue; margin-left: 10px;">■ Cooler</span>
-                            <span style="color: yellow; margin-left: 10px;">■ Average</span>
-                            <span style="color: red; margin-left: 10px;">■ Warmer</span>
-                        </div>
-                        """
-
-                    elif radar_option == "Wind":
-                        # Simulate Wind Gusts (Variable)
-                        # Green (Calm) -> Orange (Breezy) -> Red (Strong)
-                        for _ in range(200):
-                            p_lat = lat + np.random.normal(0, 0.08)
-                            p_lon = lon + np.random.normal(0, 0.08)
-                            heat_data.append([p_lat, p_lon, np.random.uniform(0.3, 0.9)])
-                            
-                        gradient = {0.2: 'green', 0.5: 'orange', 1.0: 'red'}
-                        legend_html = """
-                        <div style="background-color: white; padding: 10px; border-radius: 5px; border: 1px solid #ddd; margin-top: -10px; margin-bottom: 20px;">
-                            <span style="font-weight: bold;">Wind Speed:</span>
-                            <span style="color: green; margin-left: 10px;">■ Calm</span>
-                            <span style="color: orange; margin-left: 10px;">■ Breezy</span>
-                            <span style="color: red; margin-left: 10px;">■ Gusty</span>
-                        </div>
-                        """
-                        
-                    elif radar_option == "Humidity":
-                        # Simulate Humidity (Patches)
-                        # Yellow (Dry) -> Blue (Humid)
-                        for _ in range(200):
-                            p_lat = lat + np.random.normal(0, 0.08)
-                            p_lon = lon + np.random.normal(0, 0.08)
-                            heat_data.append([p_lat, p_lon, np.random.uniform(0.4, 0.9)])
-                            
-                        gradient = {0.2: 'yellow', 0.6: 'cyan', 1.0: 'blue'}
-                        legend_html = """
-                        <div style="background-color: white; padding: 10px; border-radius: 5px; border: 1px solid #ddd; margin-top: -10px; margin-bottom: 20px;">
-                            <span style="font-weight: bold;">Humidity:</span>
-                            <span style="color: yellow; margin-left: 10px;">■ Dry</span>
-                            <span style="color: cyan; margin-left: 10px;">■ Humid</span>
-                            <span style="color: blue; margin-left: 10px;">■ Saturated</span>
-                        </div>
-                        """
-
-                    # Add HeatMap
-                    HeatMap(heat_data, radius=20, blur=15, max_zoom=10, 
-                           gradient=gradient, name=f"{radar_option} Layer").add_to(m)
-                    
-                    folium.Marker([lat, lon], popup=f"<b>{city}</b>", icon=folium.Icon(color='red', icon='info-sign')).add_to(m)
-                    folium.LayerControl().add_to(m)
-                    st_folium(m, height=400, width='stretch')
-                    st.markdown(legend_html, unsafe_allow_html=True)
-                    st.markdown("---")
-                    st.markdown("---")
-
-                # --- MOCK KPI GAUGES SECTION (Simplified for Space) ---
-                st.markdown("### 📊 Metrics Overview")
-                kpi1, kpi2, kpi3 = st.columns(3)
-                with kpi1:
-                     st.info(f"**Temperature**: {current['temperature_2m']:.1f}°C")
-                     st.progress((current['temperature_2m'] + 10) / 60) # Normalized roughly
-                with kpi2:
-                     st.info(f"**Wind Speed**: {current['wind_speed_10m']:.1f} km/h")
-                     st.progress(min(current['wind_speed_10m'] / 100, 1.0))
-                with kpi3:
-                     st.info(f"**Humidity**: {current['relative_humidity_2m']:.0f}%")
-                     st.progress(current['relative_humidity_2m'] / 100)
+            if radar_option == "Precipitation":
+                # Simulate clusters (Storms)
+                for _ in range(3):
+                    c_lat = lat + np.random.uniform(-0.1, 0.1)
+                    c_lon = lon + np.random.uniform(-0.1, 0.1)
+                    for _ in range(100):
+                        p_lat = c_lat + np.random.normal(0, 0.02)
+                        p_lon = c_lon + np.random.normal(0, 0.02)
+                        heat_data.append([p_lat, p_lon, np.random.uniform(0.5, 1.0)])
                 
-                st.markdown("---")
+                gradient = {0.4: 'blue', 0.65: 'lime', 1: 'red'}
+                legend_html = """
+                <div style="background-color: white; padding: 10px; border-radius: 5px; border: 1px solid #ddd; margin-top: -10px; margin-bottom: 20px;">
+                    <span style="font-weight: bold;">Intensity:</span>
+                    <span style="color: blue; margin-left: 10px;">■ Low</span>
+                    <span style="color: lime; margin-left: 10px;">■ Moderate</span>
+                    <span style="color: red; margin-left: 10px;">■ High</span>
+                </div>
+                """
 
-                # --- SECTION 3: 24-HOUR FORECAST ---
-                st.markdown("### 🕒 24-Hour Hourly Forecast")
-                # Scrollable container for hours
-                now = pd.Timestamp.now().floor('h')
-                next_24h = hourly[hourly['date'] >= now].head(24).copy()
+            elif radar_option == "Temperature":
+                # Simulate Temperature Field (Smooth)
+                # Blue (Cold) -> Yellow (Mild) -> Red (Hot)
+                for _ in range(200):
+                    p_lat = lat + np.random.normal(0, 0.08)
+                    p_lon = lon + np.random.normal(0, 0.08)
+                    heat_data.append([p_lat, p_lon, np.random.uniform(0.4, 0.8)])
+                    
+                gradient = {0.2: 'blue', 0.5: 'yellow', 1.0: 'red'}
+                legend_html = """
+                <div style="background-color: white; padding: 10px; border-radius: 5px; border: 1px solid #ddd; margin-top: -10px; margin-bottom: 20px;">
+                    <span style="font-weight: bold;">Temperature:</span>
+                    <span style="color: blue; margin-left: 10px;">■ Cooler</span>
+                    <span style="color: yellow; margin-left: 10px;">■ Average</span>
+                    <span style="color: red; margin-left: 10px;">■ Warmer</span>
+                </div>
+                """
+
+            elif radar_option == "Wind":
+                # Simulate Wind Gusts (Variable)
+                # Green (Calm) -> Orange (Breezy) -> Red (Strong)
+                for _ in range(200):
+                    p_lat = lat + np.random.normal(0, 0.08)
+                    p_lon = lon + np.random.normal(0, 0.08)
+                    heat_data.append([p_lat, p_lon, np.random.uniform(0.3, 0.9)])
+                    
+                gradient = {0.2: 'green', 0.5: 'orange', 1.0: 'red'}
+                legend_html = """
+                <div style="background-color: white; padding: 10px; border-radius: 5px; border: 1px solid #ddd; margin-top: -10px; margin-bottom: 20px;">
+                    <span style="font-weight: bold;">Wind Speed:</span>
+                    <span style="color: green; margin-left: 10px;">■ Calm</span>
+                    <span style="color: orange; margin-left: 10px;">■ Breezy</span>
+                    <span style="color: red; margin-left: 10px;">■ Gusty</span>
+                </div>
+                """
                 
-                # Create a more visual hourly scrolling view using bar chart
-                fig_hourly = go.Figure()
-                fig_hourly.add_trace(go.Bar(
-                    x=next_24h['date'], 
-                    y=next_24h['temperature_2m'],
-                    name='Temp (°C)',
-                    marker_color='orange'
+            elif radar_option == "Humidity":
+                # Simulate Humidity (Patches)
+                # Yellow (Dry) -> Blue (Humid)
+                for _ in range(200):
+                    p_lat = lat + np.random.normal(0, 0.08)
+                    p_lon = lon + np.random.normal(0, 0.08)
+                    heat_data.append([p_lat, p_lon, np.random.uniform(0.4, 0.9)])
+                    
+                gradient = {0.2: 'yellow', 0.6: 'cyan', 1.0: 'blue'}
+                legend_html = """
+                <div style="background-color: white; padding: 10px; border-radius: 5px; border: 1px solid #ddd; margin-top: -10px; margin-bottom: 20px;">
+                    <span style="font-weight: bold;">Humidity:</span>
+                    <span style="color: yellow; margin-left: 10px;">■ Dry</span>
+                    <span style="color: cyan; margin-left: 10px;">■ Humid</span>
+                    <span style="color: blue; margin-left: 10px;">■ Saturated</span>
+                </div>
+                """
+
+            # Add HeatMap
+            HeatMap(heat_data, radius=20, blur=15, max_zoom=10, 
+                   gradient=gradient, name=f"{radar_option} Layer").add_to(m)
+            
+            folium.Marker([lat, lon], popup=f"<b>{city}</b>", icon=folium.Icon(color='red', icon='info-sign')).add_to(m)
+            folium.LayerControl().add_to(m)
+            st_folium(m, height=400, width='stretch')
+            st.markdown(legend_html, unsafe_allow_html=True)
+            st.markdown("---")
+            st.markdown("---")
+
+        # --- MOCK KPI GAUGES SECTION (Simplified for Space) ---
+        st.markdown("### 📊 Metrics Overview")
+        kpi1, kpi2, kpi3 = st.columns(3)
+        with kpi1:
+             st.info(f"**Temperature**: {current['temperature_2m']:.1f}°C")
+             st.progress((current['temperature_2m'] + 10) / 60) # Normalized roughly
+        with kpi2:
+             st.info(f"**Wind Speed**: {current['wind_speed_10m']:.1f} km/h")
+             st.progress(min(current['wind_speed_10m'] / 100, 1.0))
+        with kpi3:
+             st.info(f"**Humidity**: {current['relative_humidity_2m']:.0f}%")
+             st.progress(current['relative_humidity_2m'] / 100)
+        
+        st.markdown("---")
+
+        # --- SECTION 3: 24-HOUR FORECAST ---
+        st.markdown("### 🕒 24-Hour Hourly Forecast")
+        # Scrollable container for hours
+        now = pd.Timestamp.now().floor('h')
+        next_24h = hourly[hourly['date'] >= now].head(24).copy()
+        
+        # Create a more visual hourly scrolling view using bar chart
+        fig_hourly = go.Figure()
+        fig_hourly.add_trace(go.Bar(
+            x=next_24h['date'], 
+            y=next_24h['temperature_2m'],
+            name='Temp (°C)',
+            marker_color='orange'
+        ))
+        fig_hourly.add_trace(go.Scatter(
+            x=next_24h['date'],
+            y=next_24h['precipitation_probability'],
+            name='Precip Prob (%)',
+            yaxis='y2',
+            line=dict(color='blue', dash='dot')
+        ))
+        fig_hourly.update_layout(
+            title=dict(text="Temperature & Rain Probability", x=0.5),
+            yaxis=dict(title="Temperature (°C)"),
+            yaxis2=dict(title="Probability (%)", overlaying='y', side='right', range=[0, 100]),
+            hovermode="x unified",
+            height=350,
+            margin=dict(l=20, r=20, t=40, b=20),
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            font=dict(color='gray')
+        )
+        st.plotly_chart(fig_hourly, width='stretch')
+
+        st.markdown("---")
+
+        # --- SECTION 3.5: PREDICTIVE ANALYSIS (SARIMAX FORECAST) ---
+        if show_extended and daily is not None:
+            st.markdown("### 📈 Predictive Analysis (SARIMAX Forecast)")
+            st.caption("Seasonal AutoRegressive Integrated Moving Average with eXogenous regressors projection")
+            
+            # Preparing data for SARIMAX-style visualization
+            # We use the high-quality forecast data to represent the model output
+            # Mean Temp as the 'Predicted Trend'
+            # Max/Min Temp as the 'Confidence Interval'
+            
+            daily['mean_temp'] = (daily['temperature_2m_max'] + daily['temperature_2m_min']) / 2
+            
+            fig_sarimax = go.Figure()
+            
+            # Confidence Interval (Upper Bound) - Transparent line
+            fig_sarimax.add_trace(go.Scatter(
+                x=daily['date'],
+                y=daily['temperature_2m_max'],
+                mode='lines',
+                line=dict(width=0),
+                showlegend=False,
+                hoverinfo='skip'
+            ))
+            
+            # Confidence Interval (Lower Bound) - Filled area
+            fig_sarimax.add_trace(go.Scatter(
+                x=daily['date'],
+                y=daily['temperature_2m_min'],
+                mode='lines',
+                line=dict(width=0),
+                fill='tonexty',
+                fillcolor='rgba(0, 100, 255, 0.2)',
+                name='Confidence Interval (95%)'
+            ))
+            
+            # Main Trend Line
+            fig_sarimax.add_trace(go.Scatter(
+                x=daily['date'],
+                y=daily['mean_temp'],
+                mode='lines+markers',
+                line=dict(color='royalblue', width=3),
+                marker=dict(size=6, color='white', line=dict(width=2, color='royalblue')),
+                name='Predicted Trend'
+            ))
+            
+            fig_sarimax.update_layout(
+                title=dict(text="Temperature Forecast Trend (10 Days)", x=0.5),
+                yaxis=dict(title="Temperature (°C)"),
+                xaxis=dict(title="Date"),
+                hovermode="x unified",
+                height=400,
+                margin=dict(l=20, r=20, t=40, b=20),
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                font=dict(color='gray'),
+                showlegend=True,
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+            )
+            st.plotly_chart(fig_sarimax, width='stretch')
+
+        st.markdown("---")
+
+        # --- SECTION 4: 10-DAY EXTENDED FORECAST ---
+        if show_extended and daily is not None:
+             st.markdown("### 🗓️ 10-Day Extended Forecast")
+             
+             # Create a vertical list view for quick scanning
+             for index, row in daily.iterrows():
+                 cols = st.columns([1, 2, 2, 2, 1])
+                 date_str = pd.to_datetime(row['date']).strftime("%A, %b %d")
+                 icon = get_weather_icon(row['weather_code'])
+                 desc = get_weather_description(row['weather_code'])
+                 
+                 with cols[0]:
+                     st.write(f"**{date_str}**")
+                 with cols[1]:
+                     st.write(f"{icon} {desc}")
+                 with cols[2]:
+                     st.write(f"🌡️ {row['temperature_2m_max']:.1f}° / {row['temperature_2m_min']:.1f}°")
+                 with cols[3]:
+                     rain_prob = row.get('precipitation_probability_max', 0)
+                     st.write(f"💧 {rain_prob:.0f}% Rain")
+                 with cols[4]:
+                     st.write(f"🌧️ {row['precipitation_sum']:.1f} mm")
+                 st.markdown("<hr style='margin: 5px 0; opacity: 0.3;'>", unsafe_allow_html=True)
+        
+        st.markdown("---")
+
+        # --- SECTION 5: AIR QUALITY & PMF ANALYSIS ---
+        st.markdown("### 🌫️ Air Quality & Source Analysis (PMF)")
+        
+        aq_data = get_air_quality_data(lat, lon)
+        if aq_data:
+            pmf_sources, highest_pollutant = perform_pmf_analysis(aq_data)
+            
+            # AQI & Status
+            aqi = aq_data['us_aqi']
+            if aqi <= 50: status, color = "Good", "green"
+            elif aqi <= 100: status, color = "Moderate", "yellow"
+            elif aqi <= 150: status, color = "Unhealthy for Sensitive Groups", "orange"
+            elif aqi <= 200: status, color = "Unhealthy", "red"
+            elif aqi <= 300: status, color = "Very Unhealthy", "purple"
+            else: status, color = "Hazardous", "maroon"
+            
+            col_aq1, col_aq2 = st.columns([1, 2])
+            
+            with col_aq1:
+                st.markdown(f"""
+                    <div class="metric-card">
+                        <h2 style="margin:0;">US AQI</h2>
+                        <h1 style="color:{color}; font-size: 48px; margin:0;">{aqi:.0f}</h1>
+                        <h3 style="color:{color}; margin:0;">{status}</h3>
+                        <p style="margin-top:10px;">Highest Pollutant: <strong>{highest_pollutant}</strong></p>
+                    </div>
+                """, unsafe_allow_html=True)
+            
+            with col_aq2:
+                # PMF Source Apportionment Chart
+                source_df = pd.DataFrame(list(pmf_sources.items()), columns=['Source', 'Contribution'])
+                fig_pmf = px.pie(source_df, values='Contribution', names='Source', 
+                                title='Estimated Pollution Sources (PMF Analysis)',
+                                color_discrete_sequence=px.colors.qualitative.Pastel)
+                fig_pmf.update_layout(
+                    title=dict(x=0.5),
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)'
+                )
+                st.plotly_chart(fig_pmf, width='stretch')
+
+            # --- NEW: 4 POLLUTANT MAPS GRID ---
+            st.markdown("#### 🗺️ Pollutant Distribution Maps")
+            
+            # Function to create mini map
+            def create_mini_map(param_name, value, threshold):
+                m_mini = folium.Map(location=[lat, lon], zoom_start=11, control_scale=False, zoom_control=False)
+                folium.TileLayer('CartoDB positron').add_to(m_mini) # Cleaner look
+                
+                # Simulate dispersion
+                mini_heat_data = []
+                for _ in range(200):
+                    p_lat = lat + np.random.normal(0, 0.06)
+                    p_lon = lon + np.random.normal(0, 0.06)
+                    dist = np.sqrt((p_lat - lat)**2 + (p_lon - lon)**2)
+                    # Normalized intensity relative to threshold
+                    intensity = min(1.0, max(0.1, (value / threshold) * (1 - dist*8)))
+                    mini_heat_data.append([p_lat, p_lon, intensity])
+                    
+                HeatMap(mini_heat_data, radius=15, blur=10, 
+                        gradient={0.2: 'blue', 0.5: 'yellow', 1.0: 'red'}).add_to(m_mini)
+                return m_mini
+
+            pm_col1, pm_col2 = st.columns(2)
+
+            with pm_col1:
+                st.markdown("<h5 style='text-align: center;'>PM2.5 Distribution</h5>", unsafe_allow_html=True)
+                map1 = create_mini_map("PM2.5", aq_data['pm2_5'], 35) # WHO guideline 
+                st_folium(map1, height=250, width='stretch', key="pm25_map")
+                
+                st.markdown("<h5 style='text-align: center;'>Ozone (O3) Distribution</h5>", unsafe_allow_html=True)
+                map3 = create_mini_map("O3", aq_data['o3'], 100)
+                st_folium(map3, height=250, width='stretch', key="o3_map")
+
+            with pm_col2:
+                st.markdown("<h5 style='text-align: center;'>NO2 Hotspots</h5>", unsafe_allow_html=True)
+                map2 = create_mini_map("NO2", aq_data['no2'], 40)
+                st_folium(map2, height=250, width='stretch', key="no2_map")
+                
+                st.markdown("<h5 style='text-align: center;'>CO Concentration</h5>", unsafe_allow_html=True)
+                map4 = create_mini_map("CO", aq_data['co'], 4000)
+                st_folium(map4, height=250, width='stretch', key="co_map")
+
+            col_p1, col_p2, col_p3 = st.columns(3)
+            with col_p1:
+                st.metric("PM2.5 (Fine Particles)", f"{aq_data['pm2_5']:.1f} µg/m³")
+                st.metric("PM10 (Coarse Particles)", f"{aq_data['pm10']:.1f} µg/m³")
+            with col_p2:
+                st.metric("NO2 (Nitrogen Dioxide)", f"{aq_data['no2']:.1f} µg/m³")
+                st.metric("SO2 (Sulfur Dioxide)", f"{aq_data['so2']:.1f} µg/m³")
+            with col_p3:
+                st.metric("Ozone (O3)", f"{aq_data['o3']:.1f} µg/m³")
+                st.metric("Carbon Monoxide (CO)", f"{aq_data['co']:.1f} µg/m³")
+            
+            # --- NEW: ADVANCED POLAR PLOTS (CPF & Bivariate) ---
+            st.markdown("---")
+            st.markdown("#### 🧭 Advanced Source Tracking (Polar Analysis)")
+            st.caption("Analysis helps identify the direction and wind conditions associated with high pollution.")
+            
+            # Generate synthetic 24h data based on current conditions for demonstration
+            # In production, use actual hourly history
+            n_points = 500
+            # Simulate a dominant pollution source from North-East (45 degrees)
+            sim_wd = np.random.normal(45, 30, n_points) % 360
+            sim_ws = np.abs(np.random.normal(current['wind_speed_10m'], 2, n_points))
+            # Pollution higher when wind is from source (45 deg) and low speed (accumulation)
+            angular_diff = np.abs(np.deg2rad(sim_wd - 45))
+            sim_pm25 = 100 * np.exp(-angular_diff) + np.random.normal(10, 5, n_points) + (20/ (sim_ws + 1))
+            
+            pol_df = pd.DataFrame({'wd': sim_wd, 'ws': sim_ws, 'pm25': sim_pm25})
+            
+            adv_col1, adv_col2 = st.columns(2)
+            
+            with adv_col1:
+                st.markdown("<h5 style='text-align: center;'>CPF Analysis (Percentile Rose)</h5>", unsafe_allow_html=True)
+                st.caption("Probability of PM2.5 > 75th percentile by wind direction.")
+                
+                # CPF Calculation
+                threshold = np.percentile(pol_df['pm25'], 75)
+                bins = np.arange(0, 360, 22.5)
+                pol_df['wd_bin'] = pd.cut(pol_df['wd'], bins=bins, labels=bins[:-1])
+                
+                cpf_data = []
+                for bin_start in bins[:-1]:
+                    subset = pol_df[pol_df['wd_bin'] == bin_start]
+                    if len(subset) > 0:
+                        prob = len(subset[subset['pm25'] > threshold]) / len(subset)
+                    else:
+                        prob = 0
+                    cpf_data.append(prob)
+                    
+                fig_cpf = go.Figure(go.Barpolar(
+                    r=cpf_data,
+                    theta=bins[:-1],
+                    width=22.5,
+                    marker_color='crimson',
+                    marker_line_color='black',
+                    marker_line_width=1,
+                    opacity=0.8
                 ))
-                fig_hourly.add_trace(go.Scatter(
-                    x=next_24h['date'],
-                    y=next_24h['precipitation_probability'],
-                    name='Precip Prob (%)',
-                    yaxis='y2',
-                    line=dict(color='blue', dash='dot')
-                ))
-                fig_hourly.update_layout(
-                    title=dict(text="Temperature & Rain Probability", x=0.5),
-                    yaxis=dict(title="Temperature (°C)"),
-                    yaxis2=dict(title="Probability (%)", overlaying='y', side='right', range=[0, 100]),
-                    hovermode="x unified",
+                fig_cpf.update_layout(
+                    template='plotly_dark' if st.get_option('theme.base') == 'dark' else 'plotly_white',
+                    polar=dict(radialaxis=dict(visible=True, range=[0, 1])),
                     height=350,
-                    margin=dict(l=20, r=20, t=40, b=20),
+                    margin=dict(l=20, r=20, t=20, b=20),
                     paper_bgcolor='rgba(0,0,0,0)',
                     plot_bgcolor='rgba(0,0,0,0)',
                     font=dict(color='gray')
                 )
-                st.plotly_chart(fig_hourly, width='stretch')
+                st.plotly_chart(fig_cpf, width='stretch')
 
-                st.markdown("---")
-
-                # --- SECTION 3.5: PREDICTIVE ANALYSIS (SARIMAX FORECAST) ---
-                if show_extended and daily is not None:
-                    st.markdown("### 📈 Predictive Analysis (SARIMAX Forecast)")
-                    st.caption("Seasonal AutoRegressive Integrated Moving Average with eXogenous regressors projection")
-                    
-                    # Preparing data for SARIMAX-style visualization
-                    # We use the high-quality forecast data to represent the model output
-                    # Mean Temp as the 'Predicted Trend'
-                    # Max/Min Temp as the 'Confidence Interval'
-                    
-                    daily['mean_temp'] = (daily['temperature_2m_max'] + daily['temperature_2m_min']) / 2
-                    
-                    fig_sarimax = go.Figure()
-                    
-                    # Confidence Interval (Upper Bound) - Transparent line
-                    fig_sarimax.add_trace(go.Scatter(
-                        x=daily['date'],
-                        y=daily['temperature_2m_max'],
-                        mode='lines',
-                        line=dict(width=0),
-                        showlegend=False,
-                        hoverinfo='skip'
-                    ))
-                    
-                    # Confidence Interval (Lower Bound) - Filled area
-                    fig_sarimax.add_trace(go.Scatter(
-                        x=daily['date'],
-                        y=daily['temperature_2m_min'],
-                        mode='lines',
-                        line=dict(width=0),
-                        fill='tonexty',
-                        fillcolor='rgba(0, 100, 255, 0.2)',
-                        name='Confidence Interval (95%)'
-                    ))
-                    
-                    # Main Trend Line
-                    fig_sarimax.add_trace(go.Scatter(
-                        x=daily['date'],
-                        y=daily['mean_temp'],
-                        mode='lines+markers',
-                        line=dict(color='royalblue', width=3),
-                        marker=dict(size=6, color='white', line=dict(width=2, color='royalblue')),
-                        name='Predicted Trend'
-                    ))
-                    
-                    fig_sarimax.update_layout(
-                        title=dict(text="Temperature Forecast Trend (10 Days)", x=0.5),
-                        yaxis=dict(title="Temperature (°C)"),
-                        xaxis=dict(title="Date"),
-                        hovermode="x unified",
-                        height=400,
-                        margin=dict(l=20, r=20, t=40, b=20),
-                        paper_bgcolor='rgba(0,0,0,0)',
-                        plot_bgcolor='rgba(0,0,0,0)',
-                        font=dict(color='gray'),
-                        showlegend=True,
-                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+            with adv_col2:
+                st.markdown("<h5 style='text-align: center;'>Bivariate Polar Plot</h5>", unsafe_allow_html=True)
+                st.caption("Pollutant concentration vs. Wind Speed & Direction.")
+                
+                fig_biv = go.Figure(go.Scatterpolar(
+                    r=pol_df['ws'],
+                    theta=pol_df['wd'],
+                    mode='markers',
+                    marker=dict(
+                        color=pol_df['pm25'],
+                        colorscale='Jet',
+                        size=8,
+                        colorbar=dict(title="PM2.5"),
+                        showscale=True
                     )
-                    st.plotly_chart(fig_sarimax, width='stretch')
+                ))
+                fig_biv.update_layout(
+                    template='plotly_dark' if st.get_option('theme.base') == 'dark' else 'plotly_white',
+                    polar=dict(radialaxis=dict(visible=True, title="Wind Speed (m/s)")),
+                    height=350,
+                    margin=dict(l=20, r=20, t=20, b=20),
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    font=dict(color='gray')
+                )
+                st.plotly_chart(fig_biv, width='stretch')
 
-                st.markdown("---")
+            st.markdown("#### 🏭 Top Major Sources Investigation")
+            sorted_sources = sorted(pmf_sources.items(), key=lambda x: x[1], reverse=True)
+            for i, (source, contribution) in enumerate(sorted_sources[:3]):
+                st.write(f"**{i+1}. {source} ({contribution:.1f}%)**")
+                if source == "Vehicular Emissions":
+                    st.caption("Driven by elevated NO2 and CO levels. Consider reducing car usage.")
+                elif source == "Industrial Activity":
+                    st.caption("Driven by SO2 and Fine Particulates. Likely form nearby factories or power plants.")
+                elif source == "Dust & Construction":
+                    st.caption("Driven by high PM10. Avoid dusty areas or construction sites.")
+                elif source == "Secondary Aerosols":
+                    st.caption("Driven by Ozone and chemical reactions in the atmosphere.")
 
-                # --- SECTION 4: 10-DAY EXTENDED FORECAST ---
-                if show_extended and daily is not None:
-                     st.markdown("### 🗓️ 10-Day Extended Forecast")
-                     
-                     # Create a vertical list view for quick scanning
-                     for index, row in daily.iterrows():
-                         cols = st.columns([1, 2, 2, 2, 1])
-                         date_str = pd.to_datetime(row['date']).strftime("%A, %b %d")
-                         icon = get_weather_icon(row['weather_code'])
-                         desc = get_weather_description(row['weather_code'])
-                         
-                         with cols[0]:
-                             st.write(f"**{date_str}**")
-                         with cols[1]:
-                             st.write(f"{icon} {desc}")
-                         with cols[2]:
-                             st.write(f"🌡️ {row['temperature_2m_max']:.1f}° / {row['temperature_2m_min']:.1f}°")
-                         with cols[3]:
-                             rain_prob = row.get('precipitation_probability_max', 0)
-                             st.write(f"💧 {rain_prob:.0f}% Rain")
-                         with cols[4]:
-                             st.write(f"🌧️ {row['precipitation_sum']:.1f} mm")
-                         st.markdown("<hr style='margin: 5px 0; opacity: 0.3;'>", unsafe_allow_html=True)
+        else:
+            st.warning("Could not fetch Air Quality data for this location.")
+
+        st.markdown("---")
+
+        # --- SECTION 6: WHAIR BOT (Interactive) ---
+        st.markdown("---")
+        st.subheader("💬 Chat with WHAIR BOT")
+        st.caption("Ask specific questions about weather conditions, health precautions, or AQI analysis.")
+            
+        # Initialize chat history
+        if "messages" not in st.session_state:
+            st.session_state.messages = []
+            # Add initial context-aware greeting
+            greeting = f"Hello! I am **WHAIR BOT**. The current AQI in {city} is {aq_data['us_aqi'] if aq_data else 'Unknown'}. How can I assist you with weather or health advice today?"
+            st.session_state.messages.append({"role": "assistant", "content": greeting})
+
+        # Display chat messages from history on app rerun
+        for message in st.session_state.messages:
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
+
+    # React to user input
+    if prompt := st.chat_input("Ex: Is it safe to go for a run?"):
+        # Display user message in chat message container
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        with st.chat_message("assistant"):
+            try:
+                client = Groq(api_key=groq_api_key, http_client=httpx.Client())
                 
-                st.markdown("---")
-
-                # --- SECTION 5: AIR QUALITY & PMF ANALYSIS ---
-                st.markdown("### 🌫️ Air Quality & Source Analysis (PMF)")
+                # Method 1 & 2: RAG Context Retrieval (Search Knowledge Base)
+                rag_context = brain.search_knowledge(prompt)
                 
-                aq_data = get_air_quality_data(lat, lon)
-                if aq_data:
-                    pmf_sources, highest_pollutant = perform_pmf_analysis(aq_data)
-                    
-                    # AQI & Status
-                    aqi = aq_data['us_aqi']
-                    if aqi <= 50: status, color = "Good", "green"
-                    elif aqi <= 100: status, color = "Moderate", "yellow"
-                    elif aqi <= 150: status, color = "Unhealthy for Sensitive Groups", "orange"
-                    elif aqi <= 200: status, color = "Unhealthy", "red"
-                    elif aqi <= 300: status, color = "Very Unhealthy", "purple"
-                    else: status, color = "Hazardous", "maroon"
-                    
-                    col_aq1, col_aq2 = st.columns([1, 2])
-                    
-                    with col_aq1:
-                        st.markdown(f"""
-                            <div class="metric-card">
-                                <h2 style="margin:0;">US AQI</h2>
-                                <h1 style="color:{color}; font-size: 48px; margin:0;">{aqi:.0f}</h1>
-                                <h3 style="color:{color}; margin:0;">{status}</h3>
-                                <p style="margin-top:10px;">Highest Pollutant: <strong>{highest_pollutant}</strong></p>
-                            </div>
-                        """, unsafe_allow_html=True)
-                    
-                    with col_aq2:
-                        # PMF Source Apportionment Chart
-                        source_df = pd.DataFrame(list(pmf_sources.items()), columns=['Source', 'Contribution'])
-                        fig_pmf = px.pie(source_df, values='Contribution', names='Source', 
-                                        title='Estimated Pollution Sources (PMF Analysis)',
-                                        color_discrete_sequence=px.colors.qualitative.Pastel)
-                        fig_pmf.update_layout(
-                            title=dict(x=0.5),
-                            paper_bgcolor='rgba(0,0,0,0)',
-                            plot_bgcolor='rgba(0,0,0,0)'
-                        )
-                        st.plotly_chart(fig_pmf, width='stretch')
+                # Method 4: Setup Tools for Function Calling
+                tools = get_weather_tools()
+                
+                # Prepare a small forecast summary for the bot
+                forecast_summary = ""
+                if 'hourly' in locals() and hourly is not None:
+                    next_24h = hourly.head(24)
+                    forecast_summary = f"Next 24h Summary: Max Temp {next_24h['temperature_2m'].max()}°C, Min Temp {next_24h['temperature_2m'].min()}°C."
 
-                    # --- NEW: 4 POLLUTANT MAPS GRID ---
-                    st.markdown("#### 🗺️ Pollutant Distribution Maps")
-                    
-                    # Function to create mini map
-                    def create_mini_map(param_name, value, threshold):
-                        m_mini = folium.Map(location=[lat, lon], zoom_start=11, control_scale=False, zoom_control=False)
-                        folium.TileLayer('CartoDB positron').add_to(m_mini) # Cleaner look
+                system_context = f"""
+                You are 'WHAIR BOT', an expert weather and environmental health assistant. 
+                Location: {city}, {country}.
+                Current Weather: {current.get('temperature_2m')}°C, {current.get('relative_humidity_2m')}% humidity.
+                Conditions: {get_weather_description(current.get('weather_code', 0))}.
+                Air Quality: AQI {aq_data.get('us_aqi') if aq_data else 'N/A'}.
+                {forecast_summary}
+                
+                TECHNICAL CONTEXT (RAG):
+                {rag_context}
+                
+                INSTRUCTIONS:
+                1. Be concise, professional, and friendly.
+                2. If you need historical data to answer a trend question, use the 'get_historical_analysis' tool.
+                3. If you need to explain a dashboard chart, use 'explain_dash_component'.
+                4. NEVER output raw <function> tags. Use the native tool calling feature.
+                """
+                
+                messages = [{"role": "system", "content": system_context}] + \
+                           [m for m in st.session_state.messages[-5:]] # Context of last few turns
+                
+                # Process with Tool capability
+                response = client.chat.completions.create(
+                    model="llama-3.1-8b-instant", # Using instant model as requested
+                    messages=messages,
+                    tools=tools,
+                    tool_choice="auto"
+                )
+                
+                response_message = response.choices[0].message
+                
+                # Handle Tool Calls (Method 4)
+                if response_message.tool_calls:
+                    for tool_call in response_message.tool_calls:
+                        function_name = tool_call.function.name
+                        args = json.loads(tool_call.function.arguments)
                         
-                        # Simulate dispersion
-                        mini_heat_data = []
-                        for _ in range(200):
-                            p_lat = lat + np.random.normal(0, 0.06)
-                            p_lon = lon + np.random.normal(0, 0.06)
-                            dist = np.sqrt((p_lat - lat)**2 + (p_lon - lon)**2)
-                            # Normalized intensity relative to threshold
-                            intensity = min(1.0, max(0.1, (value / threshold) * (1 - dist*8)))
-                            mini_heat_data.append([p_lat, p_lon, intensity])
-                            
-                        HeatMap(mini_heat_data, radius=15, blur=10, 
-                                gradient={0.2: 'blue', 0.5: 'yellow', 1.0: 'red'}).add_to(m_mini)
-                        return m_mini
-
-                    pm_col1, pm_col2 = st.columns(2)
-
-                    with pm_col1:
-                        st.markdown("<h5 style='text-align: center;'>PM2.5 Distribution</h5>", unsafe_allow_html=True)
-                        map1 = create_mini_map("PM2.5", aq_data['pm2_5'], 35) # WHO guideline 
-                        st_folium(map1, height=250, width='stretch', key="pm25_map")
-                        
-                        st.markdown("<h5 style='text-align: center;'>Ozone (O3) Distribution</h5>", unsafe_allow_html=True)
-                        map3 = create_mini_map("O3", aq_data['o3'], 100)
-                        st_folium(map3, height=250, width='stretch', key="o3_map")
-
-                    with pm_col2:
-                        st.markdown("<h5 style='text-align: center;'>NO2 Hotspots</h5>", unsafe_allow_html=True)
-                        map2 = create_mini_map("NO2", aq_data['no2'], 40)
-                        st_folium(map2, height=250, width='stretch', key="no2_map")
-                        
-                        st.markdown("<h5 style='text-align: center;'>CO Concentration</h5>", unsafe_allow_html=True)
-                        map4 = create_mini_map("CO", aq_data['co'], 4000)
-                        st_folium(map4, height=250, width='stretch', key="co_map")
-
-                    col_p1, col_p2, col_p3 = st.columns(3)
-                    with col_p1:
-                        st.metric("PM2.5 (Fine Particles)", f"{aq_data['pm2_5']:.1f} µg/m³")
-                        st.metric("PM10 (Coarse Particles)", f"{aq_data['pm10']:.1f} µg/m³")
-                    with col_p2:
-                        st.metric("NO2 (Nitrogen Dioxide)", f"{aq_data['no2']:.1f} µg/m³")
-                        st.metric("SO2 (Sulfur Dioxide)", f"{aq_data['so2']:.1f} µg/m³")
-                    with col_p3:
-                        st.metric("Ozone (O3)", f"{aq_data['o3']:.1f} µg/m³")
-                        st.metric("Carbon Monoxide (CO)", f"{aq_data['co']:.1f} µg/m³")
-                    
-                    # --- NEW: ADVANCED POLAR PLOTS (CPF & Bivariate) ---
-                    st.markdown("---")
-                    st.markdown("#### 🧭 Advanced Source Tracking (Polar Analysis)")
-                    st.caption("Analysis helps identify the direction and wind conditions associated with high pollution.")
-                    
-                    # Generate synthetic 24h data based on current conditions for demonstration
-                    # In production, use actual hourly history
-                    n_points = 500
-                    # Simulate a dominant pollution source from North-East (45 degrees)
-                    sim_wd = np.random.normal(45, 30, n_points) % 360
-                    sim_ws = np.abs(np.random.normal(current['wind_speed_10m'], 2, n_points))
-                    # Pollution higher when wind is from source (45 deg) and low speed (accumulation)
-                    angular_diff = np.abs(np.deg2rad(sim_wd - 45))
-                    sim_pm25 = 100 * np.exp(-angular_diff) + np.random.normal(10, 5, n_points) + (20/ (sim_ws + 1))
-                    
-                    pol_df = pd.DataFrame({'wd': sim_wd, 'ws': sim_ws, 'pm25': sim_pm25})
-                    
-                    adv_col1, adv_col2 = st.columns(2)
-                    
-                    with adv_col1:
-                        st.markdown("<h5 style='text-align: center;'>CPF Analysis (Percentile Rose)</h5>", unsafe_allow_html=True)
-                        st.caption("Probability of PM2.5 > 75th percentile by wind direction.")
-                        
-                        # CPF Calculation
-                        threshold = np.percentile(pol_df['pm25'], 75)
-                        bins = np.arange(0, 360, 22.5)
-                        pol_df['wd_bin'] = pd.cut(pol_df['wd'], bins=bins, labels=bins[:-1])
-                        
-                        cpf_data = []
-                        for bin_start in bins[:-1]:
-                            subset = pol_df[pol_df['wd_bin'] == bin_start]
-                            if len(subset) > 0:
-                                prob = len(subset[subset['pm25'] > threshold]) / len(subset)
+                        if function_name == "get_historical_analysis":
+                            tool_result = brain.get_historical_trends(args.get("city", city))
+                        elif function_name == "explain_dash_component":
+                            tool_result = brain.search_knowledge(args.get("component_name"))
+                        elif function_name == "get_forecast_analysis":
+                            scope = args.get("scope", "hourly")
+                            if scope == "hourly" and 'hourly' in locals():
+                                tool_result = hourly.head(12).to_string() # Next 12 hours
+                            elif scope == "daily" and 'daily_data' in locals():
+                                tool_result = daily_data.to_string()
                             else:
-                                prob = 0
-                            cpf_data.append(prob)
+                                tool_result = "Forecast data currently unavailable."
+                        else:
+                            tool_result = "Tool not found."
                             
-                        fig_cpf = go.Figure(go.Barpolar(
-                            r=cpf_data,
-                            theta=bins[:-1],
-                            width=22.5,
-                            marker_color='crimson',
-                            marker_line_color='black',
-                            marker_line_width=1,
-                            opacity=0.8
-                        ))
-                        fig_cpf.update_layout(
-                            template='plotly_dark' if st.get_option('theme.base') == 'dark' else 'plotly_white',
-                            polar=dict(radialaxis=dict(visible=True, range=[0, 1])),
-                            height=350,
-                            margin=dict(l=20, r=20, t=20, b=20),
-                            paper_bgcolor='rgba(0,0,0,0)',
-                            plot_bgcolor='rgba(0,0,0,0)',
-                            font=dict(color='gray')
-                        )
-                        st.plotly_chart(fig_cpf, width='stretch')
-
-                    with adv_col2:
-                        st.markdown("<h5 style='text-align: center;'>Bivariate Polar Plot</h5>", unsafe_allow_html=True)
-                        st.caption("Pollutant concentration vs. Wind Speed & Direction.")
-                        
-                        fig_biv = go.Figure(go.Scatterpolar(
-                            r=pol_df['ws'],
-                            theta=pol_df['wd'],
-                            mode='markers',
-                            marker=dict(
-                                color=pol_df['pm25'],
-                                colorscale='Jet',
-                                size=8,
-                                colorbar=dict(title="PM2.5"),
-                                showscale=True
-                            )
-                        ))
-                        fig_biv.update_layout(
-                            template='plotly_dark' if st.get_option('theme.base') == 'dark' else 'plotly_white',
-                            polar=dict(radialaxis=dict(visible=True, title="Wind Speed (m/s)")),
-                            height=350,
-                            margin=dict(l=20, r=20, t=20, b=20),
-                            paper_bgcolor='rgba(0,0,0,0)',
-                            plot_bgcolor='rgba(0,0,0,0)',
-                            font=dict(color='gray')
-                        )
-                        st.plotly_chart(fig_biv, width='stretch')
-
-                    st.markdown("#### 🏭 Top Major Sources Investigation")
-                    sorted_sources = sorted(pmf_sources.items(), key=lambda x: x[1], reverse=True)
-                    for i, (source, contribution) in enumerate(sorted_sources[:3]):
-                        st.write(f"**{i+1}. {source} ({contribution:.1f}%)**")
-                        if source == "Vehicular Emissions":
-                            st.caption("Driven by elevated NO2 and CO levels. Consider reducing car usage.")
-                        elif source == "Industrial Activity":
-                            st.caption("Driven by SO2 and Fine Particulates. Likely form nearby factories or power plants.")
-                        elif source == "Dust & Construction":
-                            st.caption("Driven by high PM10. Avoid dusty areas or construction sites.")
-                        elif source == "Secondary Aerosols":
-                            st.caption("Driven by Ozone and chemical reactions in the atmosphere.")
-
+                        messages.append(response_message)
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "name": function_name,
+                            "content": tool_result
+                        })
+                    
+                    # Final generation after tool results
+                    second_response = client.chat.completions.create(
+                        model="llama-3.1-8b-instant",
+                        messages=messages
+                    )
+                    final_text = second_response.choices[0].message.content
                 else:
-                    st.warning("Could not fetch Air Quality data for this location.")
+                    final_text = response_message.content
 
-                st.markdown("---")
+                st.markdown(final_text)
+                st.session_state.messages.append({"role": "assistant", "content": final_text})
+            except Exception as e:
+                st.error(f"WHAIR BOT is currently resting: {e}")
 
-                # --- SECTION 6: WHAIR BOT (Interactive) ---
-                st.markdown("---")
-                st.subheader("💬 Chat with WHAIR BOT")
-                st.caption("Ask specific questions about weather conditions, health precautions, or AQI analysis.")
-                    
-                # Initialize chat history
-                if "messages" not in st.session_state:
-                    st.session_state.messages = []
-                    # Add initial context-aware greeting
-                    greeting = f"Hello! I am **WHAIR BOT**. The current AQI in {city} is {aq_data['us_aqi'] if aq_data else 'Unknown'}. How can I assist you with weather or health advice today?"
-                    st.session_state.messages.append({"role": "assistant", "content": greeting})
-
-                # Display chat messages from history on app rerun
-                for message in st.session_state.messages:
-                    with st.chat_message(message["role"]):
-                        st.markdown(message["content"])
-
-                # React to user input
-                if prompt := st.chat_input("Ex: Is it safe to go for a run?"):
-                    # Display user message in chat message container
-                    st.session_state.messages.append({"role": "user", "content": prompt})
-                    with st.chat_message("user"):
-                        st.markdown(prompt)
-
-                    with st.chat_message("assistant"):
-                        try:
-                            client = Groq(api_key=groq_api_key, http_client=httpx.Client())
-                            
-                            # Method 1 & 2: RAG Context Retrieval (Search Knowledge Base)
-                            rag_context = brain.search_knowledge(prompt)
-                            
-                            # Method 4: Setup Tools for Function Calling
-                            tools = get_weather_tools()
-                            
-                            # Prepare a small forecast summary for the bot
-                            forecast_summary = ""
-                            if 'hourly' in locals() and hourly is not None:
-                                next_24h = hourly.head(24)
-                                forecast_summary = f"Next 24h Summary: Max Temp {next_24h['temperature_2m'].max()}°C, Min Temp {next_24h['temperature_2m'].min()}°C."
-
-                            system_context = f"""
-                            You are 'WHAIR BOT', an expert weather and environmental health assistant. 
-                            Location: {city}, {country}.
-                            Current Weather: {current.get('temperature_2m')}°C, {current.get('relative_humidity_2m')}% humidity.
-                            Conditions: {get_weather_description(current.get('weather_code', 0))}.
-                            Air Quality: AQI {aq_data.get('us_aqi') if aq_data else 'N/A'}.
-                            {forecast_summary}
-                            
-                            TECHNICAL CONTEXT (RAG):
-                            {rag_context}
-                            
-                            INSTRUCTIONS:
-                            1. Be concise, professional, and friendly.
-                            2. If you need historical data to answer a trend question, use the 'get_historical_analysis' tool.
-                            3. If you need to explain a dashboard chart, use 'explain_dash_component'.
-                            4. NEVER output raw <function> tags. Use the native tool calling feature.
-                            """
-                            
-                            messages = [{"role": "system", "content": system_context}] + \
-                                       [m for m in st.session_state.messages[-5:]] # Context of last few turns
-                            
-                            # Process with Tool capability
-                            response = client.chat.completions.create(
-                                model="llama-3.1-8b-instant", # Using instant model as requested
-                                messages=messages,
-                                tools=tools,
-                                tool_choice="auto"
-                            )
-                            
-                            response_message = response.choices[0].message
-                            
-                            # Handle Tool Calls (Method 4)
-                            if response_message.tool_calls:
-                                for tool_call in response_message.tool_calls:
-                                    function_name = tool_call.function.name
-                                    args = json.loads(tool_call.function.arguments)
-                                    
-                                    if function_name == "get_historical_analysis":
-                                        tool_result = brain.get_historical_trends(args.get("city", city))
-                                    elif function_name == "explain_dash_component":
-                                        tool_result = brain.search_knowledge(args.get("component_name"))
-                                    elif function_name == "get_forecast_analysis":
-                                        scope = args.get("scope", "hourly")
-                                        if scope == "hourly" and 'hourly' in locals():
-                                            tool_result = hourly.head(12).to_string() # Next 12 hours
-                                        elif scope == "daily" and 'daily_data' in locals():
-                                            tool_result = daily_data.to_string()
-                                        else:
-                                            tool_result = "Forecast data currently unavailable."
-                                    else:
-                                        tool_result = "Tool not found."
-                                        
-                                    messages.append(response_message)
-                                    messages.append({
-                                        "role": "tool",
-                                        "tool_call_id": tool_call.id,
-                                        "name": function_name,
-                                        "content": tool_result
-                                    })
-                                
-                                # Final generation after tool results
-                                second_response = client.chat.completions.create(
-                                    model="llama-3.1-8b-instant",
-                                    messages=messages
-                                )
-                                final_text = second_response.choices[0].message.content
-                            else:
-                                final_text = response_message.content
-
-                            st.markdown(final_text)
-                            st.session_state.messages.append({"role": "assistant", "content": final_text})
-                        except Exception as e:
-                            st.error(f"WHAIR BOT is currently resting: {e}")
-
-    else:
-        st.error("Location not found. Please check the City and Country code.")
+else:
+    st.error("Location not found. Please check the City and Country code.")
