@@ -16,12 +16,7 @@ from streamlit_folium import st_folium
 from whair_bot_brain import WhairBrain, get_weather_tools
 import json
 
-@st.cache_resource
-def get_brain():
-    return WhairBrain()
-
-# Initialize the WhairBrain (Method 1 & 4)
-brain = get_brain()
+# WhairBrain has been removed for optimization
 
 
 # Page config
@@ -330,8 +325,7 @@ if fetch_btn or submitted or not st.session_state.data_fetched:
         st.session_state.aq_data = get_air_quality_data(st.session_state.lat, st.session_state.lon)
         
         # Log to historical DB for RAG (Method 1)
-        if st.session_state.current and st.session_state.aq_data:
-            brain.log_weather_to_db(city, st.session_state.current, st.session_state.aq_data)
+        # Brain logging disabled
         
         st.session_state.data_fetched = True
 
@@ -833,7 +827,8 @@ if st.session_state.data_fetched and st.session_state.current is not None:
                 client = Groq(api_key=groq_api_key, http_client=httpx.Client())
                 
                 # Method 1 & 2: RAG Context Retrieval (Search Knowledge Base)
-                rag_context = brain.search_knowledge(prompt)
+                # rag_context = brain.search_knowledge(prompt)
+                rag_context = "RAG disabled for speed."
                 
                 # Method 4: Setup Tools for Function Calling
                 tools = get_weather_tools()
@@ -882,9 +877,11 @@ if st.session_state.data_fetched and st.session_state.current is not None:
                         args = json.loads(tool_call.function.arguments)
                         
                         if function_name == "get_historical_analysis":
-                            tool_result = brain.get_historical_trends(args.get("city", city))
+                            # tool_result = brain.get_historical_trends(args.get("city", city))
+                            tool_result = "Historical analysis disabled."
                         elif function_name == "explain_dash_component":
-                            tool_result = brain.search_knowledge(args.get("component_name"))
+                            # tool_result = brain.search_knowledge(args.get("component_name"))
+                            tool_result = "Knowledge base disabled."
                         elif function_name == "get_forecast_analysis":
                             scope = args.get("scope", "hourly")
                             if scope == "hourly" and 'hourly' in locals():
