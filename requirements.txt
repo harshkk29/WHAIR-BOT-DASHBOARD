@@ -10,6 +10,7 @@ requests-cache
 retry-requests
 groq
 httpx
-faiss-cpu
-sentence-transformers
+sentence-transformers==3.0.0
+transformers==4.40.0
 statsmodels
+torch>=2.0.0

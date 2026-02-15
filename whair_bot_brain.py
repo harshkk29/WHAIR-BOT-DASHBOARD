@@ -2,7 +2,6 @@ import pandas as pd
 import numpy as np
 import json
 import os
-import faiss
 from sentence_transformers import SentenceTransformer
 from groq import Groq
 import httpx
@@ -10,41 +9,47 @@ import httpx
 # --- CONFIG ---
 DOCS_FILE = "dashboard_docs.json"
 HISTORY_FILE = "weather_history_db.csv"
-INDEX_FILE = "whair_rag.index"
 MODEL_NAME = 'all-MiniLM-L6-v2'
 
 class WhairBrain:
     def __init__(self):
         self.encoder = SentenceTransformer(MODEL_NAME)
         self.docs = []
-        self.index = None
+        self.doc_embeddings = None
         self.load_knowledge()
 
     def load_knowledge(self):
-        """Load static documentation into vector store"""
+        """Load static documentation and create embeddings using Numpy (No FAISS to avoid crashes)"""
         if os.path.exists(DOCS_FILE):
             with open(DOCS_FILE, 'r') as f:
                 self.docs = json.load(f)
             
-            # Create embeddings
-            texts = [f"{d['topic']}: {d['description']}" for d in self.docs]
-            embeddings = self.encoder.encode(texts)
-            
-            # Setup FAISS
-            dimension = embeddings.shape[1]
-            self.index = faiss.IndexFlatL2(dimension)
-            self.index.add(np.array(embeddings).astype('float32'))
+            if self.docs:
+                texts = [f"{d['topic']}: {d['description']}" for d in self.docs]
+                # Pre-calculate embeddings for the whole knowledge base
+                self.doc_embeddings = self.encoder.encode(texts)
+                # Normalize for cosine similarity
+                norms = np.linalg.norm(self.doc_embeddings, axis=1, keepdims=True)
+                self.doc_embeddings = self.doc_embeddings / (norms + 1e-9)
 
     def search_knowledge(self, query, k=2):
-        """Retrieve most relevant context for a query"""
-        if not self.index:
+        """Retrieve most relevant context using pure Numpy (Cosine Similarity)"""
+        if self.doc_embeddings is None or not self.docs:
             return ""
         
+        # Encode and normalize query
         query_vector = self.encoder.encode([query])
-        distances, indices = self.index.search(np.array(query_vector).astype('float32'), k)
+        query_norm = np.linalg.norm(query_vector)
+        query_vector = query_vector / (query_norm + 1e-9)
+        
+        # Calculate cosine similarity (dot product on normalized vectors)
+        similarities = np.dot(self.doc_embeddings, query_vector.T).flatten()
+        
+        # Get top K indices
+        top_indices = np.argsort(similarities)[-k:][::-1]
         
         results = []
-        for idx in indices[0]:
+        for idx in top_indices:
             if idx < len(self.docs):
                 results.append(self.docs[idx]['description'])
         
@@ -71,14 +76,16 @@ class WhairBrain:
         if not os.path.exists(HISTORY_FILE):
             return "No historical data recorded yet."
         
-        df = pd.read_csv(HISTORY_FILE)
-        city_df = df[df['city'].str.lower() == city.lower()].tail(5)
-        if city_df.empty:
-            return f"No history for {city}."
-        
-        return city_df.to_string()
+        try:
+            df = pd.read_csv(HISTORY_FILE)
+            city_df = df[df['city'].str.lower() == city.lower()].tail(5)
+            if city_df.empty:
+                return f"No history for {city}."
+            return city_df.to_string()
+        except Exception:
+            return "Error reading history database."
 
-# --- TOOL DEFINITIONS FOR FUNCTION CALLING ---
+# --- TOOL DEFINITIONS ---
 def get_weather_tools():
     return [
         {
@@ -99,11 +106,11 @@ def get_weather_tools():
             "type": "function",
             "function": {
                 "name": "explain_dash_component",
-                "description": "Get deep technical explanation of dashboard charts like SARIMAX or CPF plots.",
+                "description": "Get deep technical explanation of dashboard charts (SARIMAX, CPF, Bivariate).",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "component_name": {"type": "string", "description": "The name of the chart (e.g. SARIMAX, CPF, Bivariate)"}
+                        "component_name": {"type": "string", "description": "The name of the chart"}
                     },
                     "required": ["component_name"]
                 }
