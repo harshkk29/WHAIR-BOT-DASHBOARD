@@ -804,28 +804,36 @@ if fetch_btn or city: # Auto-load on start if default city is present
                                 # Method 4: Setup Tools for Function Calling
                                 tools = get_weather_tools()
                                 
+                                # Prepare a small forecast summary for the bot
+                                forecast_summary = ""
+                                if hourly_data is not None:
+                                    next_24h = hourly_data.head(24)
+                                    forecast_summary = f"Next 24h Summary: Max Temp {next_24h['temperature_2m'].max()}°C, Min Temp {next_24h['temperature_2m'].min()}°C."
+
                                 system_context = f"""
                                 You are 'WHAIR BOT', an expert weather and environmental health assistant. 
-                                Location: {city}, {country}
+                                Location: {city}, {country}.
                                 Current Weather: {current['temperature_2m']}°C, {current['relative_humidity_2m']}% humidity.
-                                Conditions: {get_weather_description(current['weather_code'])}
+                                Conditions: {get_weather_description(current['weather_code'])}.
                                 Air Quality: AQI {aq_data['us_aqi'] if aq_data else 'N/A'}.
+                                {forecast_summary}
                                 
                                 TECHNICAL CONTEXT (RAG):
                                 {rag_context}
                                 
                                 INSTRUCTIONS:
-                                1. Be concise and professional.
-                                2. Use tools to look up history if the user asks about trends.
-                                3. Help the user understand complex charts (SARIMAX, CPF) using the RAG context provided.
+                                1. Be concise, professional, and friendly.
+                                2. If you need historical data to answer a trend question, use the 'get_historical_analysis' tool.
+                                3. If you need to explain a dashboard chart, use 'explain_dash_component'.
+                                4. NEVER output raw <function> tags. Use the native tool calling feature.
                                 """
                                 
                                 messages = [{"role": "system", "content": system_context}] + \
-                                           st.session_state.messages[-4:]
+                                           [m for m in st.session_state.messages[-5:]] # Context of last few turns
                                 
                                 # Process with Tool capability
                                 response = client.chat.completions.create(
-                                    model="llama-3.1-8b-instant",
+                                    model="llama-3.1-70b-versatile", # Using larger model for better tool adherence
                                     messages=messages,
                                     tools=tools,
                                     tool_choice="auto"
@@ -856,7 +864,7 @@ if fetch_btn or city: # Auto-load on start if default city is present
                                     
                                     # Final generation after tool results
                                     second_response = client.chat.completions.create(
-                                        model="llama-3.1-8b-instant",
+                                        model="llama-3.1-70b-versatile",
                                         messages=messages
                                     )
                                     final_text = second_response.choices[0].message.content
