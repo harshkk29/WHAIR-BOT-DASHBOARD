@@ -833,7 +833,7 @@ if fetch_btn or city: # Auto-load on start if default city is present
                                 
                                 # Process with Tool capability
                                 response = client.chat.completions.create(
-                                    model="llama-3.1-70b-versatile", # Using larger model for better tool adherence
+                                    model="llama-3.1-8b-instant", # Using instant model as requested
                                     messages=messages,
                                     tools=tools,
                                     tool_choice="auto"
@@ -864,7 +864,7 @@ if fetch_btn or city: # Auto-load on start if default city is present
                                     
                                     # Final generation after tool results
                                     second_response = client.chat.completions.create(
-                                        model="llama-3.1-70b-versatile",
+                                        model="llama-3.1-8b-instant",
                                         messages=messages
                                     )
                                     final_text = second_response.choices[0].message.content
