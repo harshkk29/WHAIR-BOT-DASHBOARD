@@ -16,8 +16,12 @@ from streamlit_folium import st_folium
 from whair_bot_brain import WhairBrain, get_weather_tools
 import json
 
+@st.cache_resource
+def get_brain():
+    return WhairBrain()
+
 # Initialize the WhairBrain (Method 1 & 4)
-brain = WhairBrain()
+brain = get_brain()
 
 
 # Page config
@@ -460,7 +464,7 @@ if fetch_btn or city: # Auto-load on start if default city is present
                 # --- SECTION 3: 24-HOUR FORECAST ---
                 st.markdown("### 🕒 24-Hour Hourly Forecast")
                 # Scrollable container for hours
-                now = pd.Timestamp.now().floor('H')
+                now = pd.Timestamp.now().floor('h')
                 next_24h = hourly[hourly['date'] >= now].head(24).copy()
                 
                 # Create a more visual hourly scrolling view using bar chart
@@ -731,7 +735,7 @@ if fetch_btn or city: # Auto-load on start if default city is present
                                 plot_bgcolor='rgba(0,0,0,0)',
                                 font=dict(color='gray')
                             )
-                            st.plotly_chart(fig_cpf, use_container_width=True)
+                            st.plotly_chart(fig_cpf, width='stretch')
 
                         with adv_col2:
                             st.markdown("<h5 style='text-align: center;'>Bivariate Polar Plot</h5>", unsafe_allow_html=True)
@@ -758,7 +762,7 @@ if fetch_btn or city: # Auto-load on start if default city is present
                                 plot_bgcolor='rgba(0,0,0,0)',
                                 font=dict(color='gray')
                             )
-                            st.plotly_chart(fig_biv, use_container_width=True)
+                            st.plotly_chart(fig_biv, width='stretch')
 
                         st.markdown("#### 🏭 Top Major Sources Investigation")
                         sorted_sources = sorted(pmf_sources.items(), key=lambda x: x[1], reverse=True)
