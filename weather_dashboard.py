@@ -309,50 +309,53 @@ with st.sidebar:
     
     fetch_btn = st.button("🔄 Update Weather", type="primary")
 
-if fetch_btn or city: # Auto-load on start if default city is present
-    with st.spinner(f"Fetching weather for {city}, {country}..."):
-        # 1. Geocoding
-        lat, lon = get_lat_lon(city, country, OPENWEATHER_API_KEY)
-        
-        if lat and lon:
-            # 2. Fetch Weather Data
-            current, hourly, daily = get_weather_data(lat, lon)
+if 'data_fetched' not in st.session_state:
+    st.session_state.data_fetched = False
+
+if fetch_btn or submitted or not st.session_state.data_fetched:
+    # 1. Geocoding
+    lat, lon = get_lat_lon(city, country, OPENWEATHER_API_KEY)
+    
+    if lat and lon:
+        # 2. Fetch Weather Data
+        current, hourly, daily = get_weather_data(lat, lon)
+        st.session_state.data_fetched = True
             
-            if current and hourly is not None:
-                # Log to historical DB for RAG (Method 1)
-                aq_data = get_air_quality_data(lat, lon)
-                brain.log_weather_to_db(city, current, aq_data)
-                
-                # --- ALERTS SECTION ---
-                if show_alerts:
-                    # Simulated alerts logic (Open-Meteo alerts are separate endpoint, simulating for demo)
-                    alerts = []
-                    if current.get('wind_speed_10m', 0) > 40:
-                        alerts.append("⚠️ High Wind Warning: Gusts over 40 km/h")
-                    if current.get('precipitation', 0) > 10:
-                        alerts.append("🌧️ Heavy Rain Alert: Potential for localized flooding")
-                    if (current.get('temperature_2m') or 0) > 35:
-                        alerts.append("🌡️ Heat Advisory: High temperatures detected")
-                    if (current.get('temperature_2m') or 0) < 0:
-                         alerts.append("❄️ Frost Warning: Temperatures below freezing")
-                         
-                    for alert in alerts:
-                        st.warning(alert, icon="⚠️")
-                
-                # --- SECTION 1: TODAY'S UPDATE ---
-                st.subheader(f"📅 Today's Update: {city}, {country}")
-                st.caption(f"Coordinates: {lat:.4f}°N, {lon:.4f}°E | Loaded at {datetime.now().strftime('%H:%M')}")
-                
-                col1, col2, col3, col4 = st.columns(4)
-                
-                with col1:
-                    st.metric("Temperature", f"{current.get('temperature_2m', 0):.1f}°C", f"Feels like {current.get('apparent_temperature', 0):.1f}°C")
-                with col2:
-                    st.metric("Condition", f"{get_weather_icon(current.get('weather_code', 0))} {get_weather_description(current.get('weather_code', 0))}")
-                with col3:
-                    st.metric("Humidity", f"{current.get('relative_humidity_2m', 0):.0f}%")
-                with col4:
-                    st.metric("Wind", f"{current.get('wind_speed_10m', 0):.1f} km/h", f"Dir: {current.get('wind_direction_10m', 0):.0f}°")
+        if current and hourly is not None:
+            # Log to historical DB for RAG (Method 1)
+            aq_data = get_air_quality_data(lat, lon)
+            brain.log_weather_to_db(city, current, aq_data)
+            
+            # --- ALERTS SECTION ---
+            if show_alerts:
+                # Simulated alerts logic (Open-Meteo alerts are separate endpoint, simulating for demo)
+                alerts = []
+                if current.get('wind_speed_10m', 0) > 40:
+                    alerts.append("⚠️ High Wind Warning: Gusts over 40 km/h")
+                if current.get('precipitation', 0) > 10:
+                    alerts.append("🌧️ Heavy Rain Alert: Potential for localized flooding")
+                if (current.get('temperature_2m') or 0) > 35:
+                    alerts.append("🌡️ Heat Advisory: High temperatures detected")
+                if (current.get('temperature_2m') or 0) < 0:
+                     alerts.append("❄️ Frost Warning: Temperatures below freezing")
+                     
+                for alert in alerts:
+                    st.warning(alert, icon="⚠️")
+            
+            # --- SECTION 1: TODAY'S UPDATE ---
+            st.subheader(f"📅 Today's Update: {city}, {country}")
+            st.caption(f"Coordinates: {lat:.4f}°N, {lon:.4f}°E | Loaded at {datetime.now().strftime('%H:%M')}")
+            
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                st.metric("Temperature", f"{current.get('temperature_2m', 0):.1f}°C", f"Feels like {current.get('apparent_temperature', 0):.1f}°C")
+            with col2:
+                st.metric("Condition", f"{get_weather_icon(current.get('weather_code', 0))} {get_weather_description(current.get('weather_code', 0))}")
+            with col3:
+                st.metric("Humidity", f"{current.get('relative_humidity_2m', 0):.0f}%")
+            with col4:
+                st.metric("Wind", f"{current.get('wind_speed_10m', 0):.1f} km/h", f"Dir: {current.get('wind_direction_10m', 0):.0f}°")
 
                 st.markdown("---")
 
@@ -593,9 +596,8 @@ if fetch_btn or city: # Auto-load on start if default city is present
                 # --- SECTION 5: AIR QUALITY & PMF ANALYSIS ---
                 st.markdown("### 🌫️ Air Quality & Source Analysis (PMF)")
                 
-                with st.spinner("Analyzing air quality..."):
-                    aq_data = get_air_quality_data(lat, lon)
-                    if aq_data:
+                aq_data = get_air_quality_data(lat, lon)
+                if aq_data:
                         pmf_sources, highest_pollutant = perform_pmf_analysis(aq_data)
                         
                         # AQI & Status
@@ -813,8 +815,7 @@ if fetch_btn or city: # Auto-load on start if default city is present
 
                     # Display assistant response in chat message container
                     with st.chat_message("assistant"):
-                        with st.spinner("WHAIR BOT is thinking..."):
-                            try:
+                        try:
                                 client = Groq(api_key=groq_api_key, http_client=httpx.Client())
                                 
                                 # Method 1 & 2: RAG Context Retrieval (Search Knowledge Base)
