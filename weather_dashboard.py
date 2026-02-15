@@ -36,6 +36,7 @@ OPENWEATHER_API_KEY = "476a0a59e8e236c69e77b5408608fe99"
 
 # --- Functions ---
 
+@st.cache_data(ttl=600) # Cache for 10 minutes
 def get_lat_lon(city, country, api_key):
     """Fetch latitude and longitude using OpenWeatherMap Geocoding API"""
     try:
@@ -49,6 +50,7 @@ def get_lat_lon(city, country, api_key):
         st.error(f"Error fetching location: {e}")
         return None, None
 
+@st.cache_data(ttl=600)
 def get_weather_data(lat, lon):
     """Fetch weather data from Open-Meteo"""
     # Setup client
@@ -191,6 +193,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+@st.cache_data(ttl=600)
 def get_air_quality_data(lat, lon):
     """Fetch air quality data from Open-Meteo"""
     cache_session = requests_cache.CachedSession('.cache', expire_after=3600)
@@ -281,8 +284,10 @@ st.markdown("---")
 with st.sidebar:
     st.header("📍 Location Status")
     
-    city = st.text_input("City", "Mumbai")
-    country = st.text_input("Country Code (e.g., IN, US)", "IN")
+    with st.form("location_form"):
+        city = st.text_input("City", "Mumbai")
+        country = st.text_input("Country Code (e.g., IN, US)", "IN")
+        submitted = st.form_submit_button("Update Location")
     
     st.markdown("---")
     st.header("⚙️ Configuration")

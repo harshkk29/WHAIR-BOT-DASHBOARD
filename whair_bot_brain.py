@@ -6,8 +6,13 @@ from sentence_transformers import SentenceTransformer
 from groq import Groq
 import httpx
 
+import logging
+# Suppress transformers and sentence_transformers spam
+logging.getLogger("transformers").setLevel(logging.ERROR)
+logging.getLogger("sentence_transformers").setLevel(logging.ERROR)
+
 # --- CONFIG ---
-VERSION = "1.0.1" # Force update
+VERSION = "1.0.2" # Force update with silent loading
 DOCS_FILE = "dashboard_docs.json"
 HISTORY_FILE = "weather_history_db.csv"
 MODEL_NAME = 'all-MiniLM-L6-v2'
