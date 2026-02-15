@@ -10,7 +10,5 @@ requests-cache
 retry-requests
 groq
 httpx
-torch
 sentence-transformers
-transformers
 statsmodels
