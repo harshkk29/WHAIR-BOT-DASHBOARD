@@ -62,8 +62,14 @@ class WhairBrain:
             'city': city,
             'temp': weather_data['temperature_2m'],
             'aqi': aq_data['us_aqi'] if aq_data else None,
-            'source': aq_data['highest_pollutant'] if aq_data else None
+            'source': aq_data.get('highest_pollutant') if aq_data else None
         }
+        
+        # If source is missing, find the highest value among common pollutants
+        if aq_data and not new_entry['source']:
+            pollutants = {k: aq_data[k] for k in ['pm2_5', 'pm10', 'no2', 'so2', 'o3', 'co'] if k in aq_data}
+            if pollutants:
+                new_entry['source'] = max(pollutants, key=pollutants.get).upper()
         
         df = pd.DataFrame([new_entry])
         if not os.path.exists(HISTORY_FILE):
