@@ -310,13 +310,13 @@ if fetch_btn or city: # Auto-load on start if default city is present
                 if show_alerts:
                     # Simulated alerts logic (Open-Meteo alerts are separate endpoint, simulating for demo)
                     alerts = []
-                    if current['wind_speed_10m'] > 40:
+                    if current.get('wind_speed_10m', 0) > 40:
                         alerts.append("⚠️ High Wind Warning: Gusts over 40 km/h")
-                    if current['precipitation'] > 10:
+                    if current.get('precipitation', 0) > 10:
                         alerts.append("🌧️ Heavy Rain Alert: Potential for localized flooding")
-                    if current['temperature_2m'] > 35:
+                    if (current.get('temperature_2m') or 0) > 35:
                         alerts.append("🌡️ Heat Advisory: High temperatures detected")
-                    if current['temperature_2m'] < 0:
+                    if (current.get('temperature_2m') or 0) < 0:
                          alerts.append("❄️ Frost Warning: Temperatures below freezing")
                          
                     for alert in alerts:
@@ -329,13 +329,13 @@ if fetch_btn or city: # Auto-load on start if default city is present
                 col1, col2, col3, col4 = st.columns(4)
                 
                 with col1:
-                    st.metric("Temperature", f"{current['temperature_2m']:.1f}°C", f"Feels like {current['apparent_temperature']:.1f}°C")
+                    st.metric("Temperature", f"{current.get('temperature_2m', 0):.1f}°C", f"Feels like {current.get('apparent_temperature', 0):.1f}°C")
                 with col2:
-                    st.metric("Condition", f"{get_weather_icon(current['weather_code'])} {get_weather_description(current['weather_code'])}")
+                    st.metric("Condition", f"{get_weather_icon(current.get('weather_code', 0))} {get_weather_description(current.get('weather_code', 0))}")
                 with col3:
-                    st.metric("Humidity", f"{current['relative_humidity_2m']:.0f}%")
+                    st.metric("Humidity", f"{current.get('relative_humidity_2m', 0):.0f}%")
                 with col4:
-                    st.metric("Wind", f"{current['wind_speed_10m']:.1f} km/h", f"Dir: {current['wind_direction_10m']:.0f}°")
+                    st.metric("Wind", f"{current.get('wind_speed_10m', 0):.1f} km/h", f"Dir: {current.get('wind_direction_10m', 0):.0f}°")
 
                 st.markdown("---")
 
@@ -815,9 +815,9 @@ if fetch_btn or city: # Auto-load on start if default city is present
                                 system_context = f"""
                                 You are 'WHAIR BOT', an expert weather and environmental health assistant. 
                                 Location: {city}, {country}.
-                                Current Weather: {current['temperature_2m']}°C, {current['relative_humidity_2m']}% humidity.
-                                Conditions: {get_weather_description(current['weather_code'])}.
-                                Air Quality: AQI {aq_data['us_aqi'] if aq_data else 'N/A'}.
+                                Current Weather: {current.get('temperature_2m')}°C, {current.get('relative_humidity_2m')}% humidity.
+                                Conditions: {get_weather_description(current.get('weather_code', 0))}.
+                                Air Quality: AQI {aq_data.get('us_aqi') if aq_data else 'N/A'}.
                                 {forecast_summary}
                                 
                                 TECHNICAL CONTEXT (RAG):

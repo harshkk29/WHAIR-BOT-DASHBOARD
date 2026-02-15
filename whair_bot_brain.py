@@ -57,7 +57,7 @@ class WhairBrain:
 
     def log_weather_to_db(self, city, weather_data, aq_data):
         """Method 1: RAG - Build a historical library of data with rich features"""
-        if not aq_data:
+        if aq_data is None:
             aq_data = {}
 
         new_entry = {
