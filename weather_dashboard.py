@@ -60,7 +60,8 @@ def get_weather_data(lat, lon):
         "current": ["temperature_2m", "relative_humidity_2m", "apparent_temperature", "is_day", "precipitation", "rain", "weather_code", "cloud_cover", "wind_speed_10m", "wind_direction_10m"],
         "hourly": ["temperature_2m", "relative_humidity_2m", "apparent_temperature", "precipitation_probability", "precipitation", "rain", "weather_code", "cloud_cover", "wind_speed_10m"],
         "daily": ["weather_code", "temperature_2m_max", "temperature_2m_min", "precipitation_sum", "precipitation_probability_max"],
-        "forecast_days": 10
+        "forecast_days": 10,
+        "timezone": "auto"
     }
 
     try:
@@ -197,7 +198,8 @@ def get_air_quality_data(lat, lon):
         "latitude": lat,
         "longitude": lon,
         "current": ["us_aqi", "pm10", "pm2_5", "carbon_monoxide", "nitrogen_dioxide", "sulphur_dioxide", "ozone"],
-        "hourly": ["pm10", "pm2_5"]
+        "hourly": ["pm10", "pm2_5"],
+        "timezone": "auto"
     }
 
     try:
@@ -450,7 +452,7 @@ if fetch_btn or city: # Auto-load on start if default city is present
                 # --- SECTION 3: 24-HOUR FORECAST ---
                 st.markdown("### 🕒 24-Hour Hourly Forecast")
                 # Scrollable container for hours
-                now = pd.Timestamp.now()
+                now = pd.Timestamp.now().floor('H')
                 next_24h = hourly[hourly['date'] >= now].head(24).copy()
                 
                 # Create a more visual hourly scrolling view using bar chart
