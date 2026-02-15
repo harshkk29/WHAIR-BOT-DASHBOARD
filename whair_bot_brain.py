@@ -56,7 +56,7 @@ class WhairBrain:
         return "\n".join(results)
 
     def log_weather_to_db(self, city, weather_data, aq_data):
-        """Method 1: RAG - Build a historical library of data"""
+        """Method 1: RAG - Build a historical library of data with rich features"""
         if not aq_data:
             aq_data = {}
 
@@ -64,19 +64,22 @@ class WhairBrain:
             'timestamp': pd.Timestamp.now(),
             'city': city,
             'temp': weather_data.get('temperature_2m'),
+            'humidity': weather_data.get('relative_humidity_2m'),
+            'wind_speed': weather_data.get('wind_speed_10m'),
+            'weather_code': weather_data.get('weather_code'),
             'aqi': aq_data.get('us_aqi'),
             'source': aq_data.get('highest_pollutant')
         }
         
         # If source is missing, find the highest value among common pollutants
         if aq_data and not new_entry['source']:
-            pollutants = {k: aq_data[k] for k in ['pm2_5', 'pm10', 'no2', 'so2', 'o3', 'co'] if k in aq_data}
-            if pollutants:
+            pollutants = {k: aq_data.get(k, 0) for k in ['pm2_5', 'pm10', 'no2', 'so2', 'o3', 'co']}
+            if any(pollutants.values()):
                 new_entry['source'] = max(pollutants, key=pollutants.get).upper()
         
         df = pd.DataFrame([new_entry])
         if not os.path.exists(HISTORY_FILE):
-            df.to_csv(HISTORY_FILE, index=False)
+             df.to_csv(HISTORY_FILE, index=False)
         else:
             df.to_csv(HISTORY_FILE, mode='a', header=False, index=False)
 
@@ -122,6 +125,20 @@ def get_weather_tools():
                         "component_name": {"type": "string", "description": "The name of the chart"}
                     },
                     "required": ["component_name"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "get_forecast_analysis",
+                "description": "Analyze the upcoming 7-day and 24-hour forecast data to provide future-dated recommendations.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "scope": {"type": "string", "enum": ["hourly", "daily"], "description": "The timeframe to analyze"}
+                    },
+                    "required": ["scope"]
                 }
             }
         }

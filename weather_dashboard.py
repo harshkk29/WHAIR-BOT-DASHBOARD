@@ -851,6 +851,14 @@ if fetch_btn or city: # Auto-load on start if default city is present
                                             tool_result = brain.get_historical_trends(args.get("city", city))
                                         elif function_name == "explain_dash_component":
                                             tool_result = brain.search_knowledge(args.get("component_name"))
+                                        elif function_name == "get_forecast_analysis":
+                                            scope = args.get("scope", "hourly")
+                                            if scope == "hourly" and 'hourly' in locals():
+                                                tool_result = hourly.head(12).to_string() # Next 12 hours
+                                            elif scope == "daily" and 'daily_data' in locals():
+                                                tool_result = daily_data.to_string()
+                                            else:
+                                                tool_result = "Forecast data currently unavailable."
                                         else:
                                             tool_result = "Tool not found."
                                             
