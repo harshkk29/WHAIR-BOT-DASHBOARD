@@ -806,8 +806,8 @@ if fetch_btn or city: # Auto-load on start if default city is present
                                 
                                 # Prepare a small forecast summary for the bot
                                 forecast_summary = ""
-                                if hourly_data is not None:
-                                    next_24h = hourly_data.head(24)
+                                if 'hourly' in locals() and hourly is not None:
+                                    next_24h = hourly.head(24)
                                     forecast_summary = f"Next 24h Summary: Max Temp {next_24h['temperature_2m'].max()}°C, Min Temp {next_24h['temperature_2m'].min()}°C."
 
                                 system_context = f"""
