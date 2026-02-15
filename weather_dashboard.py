@@ -760,60 +760,59 @@ if fetch_btn or city: # Auto-load on start if default city is present
                 st.markdown("---")
 
                 # --- SECTION 6: WHAIR BOT (Interactive) ---
-                if groq_api_key:
-                    st.markdown("---")
-                    st.subheader("💬 Chat with WHAIR BOT")
-                    st.caption("Ask specific questions about weather conditions, health precautions, or AQI analysis.")
+                st.markdown("---")
+                st.subheader("💬 Chat with WHAIR BOT")
+                st.caption("Ask specific questions about weather conditions, health precautions, or AQI analysis.")
                     
-                    # Initialize chat history
-                    if "messages" not in st.session_state:
-                        st.session_state.messages = []
-                        # Add initial context-aware greeting
-                        greeting = f"Hello! I am **WHAIR BOT**. The current AQI in {city} is {aq_data['us_aqi'] if aq_data else 'Unknown'}. How can I assist you with weather or health advice today?"
-                        st.session_state.messages.append({"role": "assistant", "content": greeting})
+                # Initialize chat history
+                if "messages" not in st.session_state:
+                    st.session_state.messages = []
+                    # Add initial context-aware greeting
+                    greeting = f"Hello! I am **WHAIR BOT**. The current AQI in {city} is {aq_data['us_aqi'] if aq_data else 'Unknown'}. How can I assist you with weather or health advice today?"
+                    st.session_state.messages.append({"role": "assistant", "content": greeting})
 
-                    # Display chat messages from history on app rerun
-                    for message in st.session_state.messages:
-                        with st.chat_message(message["role"]):
-                            st.markdown(message["content"])
+                # Display chat messages from history on app rerun
+                for message in st.session_state.messages:
+                    with st.chat_message(message["role"]):
+                        st.markdown(message["content"])
 
-                    # React to user input
-                    if prompt := st.chat_input("Ex: Is it safe to go for a run?"):
-                        # Display user message in chat message container
-                        st.session_state.messages.append({"role": "user", "content": prompt})
-                        with st.chat_message("user"):
-                            st.markdown(prompt)
+                # React to user input
+                if prompt := st.chat_input("Ex: Is it safe to go for a run?"):
+                    # Display user message in chat message container
+                    st.session_state.messages.append({"role": "user", "content": prompt})
+                    with st.chat_message("user"):
+                        st.markdown(prompt)
 
-                        # Display assistant response in chat message container
-                        with st.chat_message("assistant"):
-                            with st.spinner("Analyzing data..."):
-                                try:
-                                    client = Groq(api_key=groq_api_key, http_client=httpx.Client())
-                                    
-                                    system_context = f"""
-                                    You are 'WHAIR BOT', an expert weather and environmental health assistant. 
-                                    Location: {city}, {country}
-                                    Current Weather: {current['temperature_2m']}°C, {current['relative_humidity_2m']}% humidity, {current['wind_speed_10m']} km/h wind.
-                                    Conditions: {get_weather_description(current['weather_code'])}
-                                    Air Quality: AQI {aq_data['us_aqi'] if aq_data else 'N/A'}, PM2.5: {aq_data['pm2_5'] if aq_data else 'N/A'}.
-                                    Main Pollution Source: {sorted_sources[0][0] if aq_data else 'N/A'}.
-                                    
-                                    Answer the user's question concisely using the data provided. 
-                                    Suggest health precautions if AQI is high (>100).
-                                    """
-                                    
-                                    msg_history = [{"role": "system", "content": system_context}] + \
-                                                  st.session_state.messages[-6:] # Keep context of last 3 turns
-                                    
-                                    completion = client.chat.completions.create(
-                                        messages=msg_history,
-                                        model="llama-3.1-8b-instant"
-                                    )
-                                    response_text = completion.choices[0].message.content
-                                    st.markdown(response_text)
-                                    st.session_state.messages.append({"role": "assistant", "content": response_text})
-                                except Exception as e:
-                                    st.error(f"WHAIR BOT is currently resting: {e}")
+                    # Display assistant response in chat message container
+                    with st.chat_message("assistant"):
+                        with st.spinner("Analyzing data..."):
+                            try:
+                                client = Groq(api_key=groq_api_key, http_client=httpx.Client())
+                                
+                                system_context = f"""
+                                You are 'WHAIR BOT', an expert weather and environmental health assistant. 
+                                Location: {city}, {country}
+                                Current Weather: {current['temperature_2m']}°C, {current['relative_humidity_2m']}% humidity, {current['wind_speed_10m']} km/h wind.
+                                Conditions: {get_weather_description(current['weather_code'])}
+                                Air Quality: AQI {aq_data['us_aqi'] if aq_data else 'N/A'}, PM2.5: {aq_data['pm2_5'] if aq_data else 'N/A'}.
+                                Main Pollution Source: {sorted_sources[0][0] if aq_data else 'N/A'}.
+                                
+                                Answer the user's question concisely using the data provided. 
+                                Suggest health precautions if AQI is high (>100).
+                                """
+                                
+                                msg_history = [{"role": "system", "content": system_context}] + \
+                                              st.session_state.messages[-6:] # Keep context of last 3 turns
+                                
+                                completion = client.chat.completions.create(
+                                    messages=msg_history,
+                                    model="llama-3.1-8b-instant"
+                                )
+                                response_text = completion.choices[0].message.content
+                                st.markdown(response_text)
+                                st.session_state.messages.append({"role": "assistant", "content": response_text})
+                            except Exception as e:
+                                st.error(f"WHAIR BOT is currently resting: {e}")
 
         else:
             st.error("Location not found. Please check the City and Country code.")
