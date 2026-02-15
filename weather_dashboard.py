@@ -279,13 +279,8 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # Groq API Key input for AI summary
-    groq_api_key = st.text_input(
-        "Groq API Key (Optional)",
-        value="",
-        type="password",
-        help="Enter your Groq API key for AI-powered summaries"
-    )
+    # Groq API Key hardcoded by default
+    groq_api_key = "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"
     
     fetch_btn = st.button("🔄 Update Weather", type="primary")
 
