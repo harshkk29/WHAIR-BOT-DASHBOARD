@@ -12,7 +12,13 @@ import requests
 import folium
 from folium.plugins import HeatMap
 import numpy as np
-from streamlit_folium import folium_static
+from streamlit_folium import st_folium
+from whair_bot_brain import WhairBrain, get_weather_tools
+import json
+
+# Initialize the WhairBrain (Method 1 & 4)
+brain = WhairBrain()
+
 
 # Page config
 st.set_page_config(
@@ -294,6 +300,9 @@ if fetch_btn or city: # Auto-load on start if default city is present
             current, hourly, daily = get_weather_data(lat, lon)
             
             if current and hourly is not None:
+                # Log to historical DB for RAG (Method 1)
+                aq_data = get_air_quality_data(lat, lon)
+                brain.log_weather_to_db(city, current, aq_data)
                 
                 # --- ALERTS SECTION ---
                 if show_alerts:
@@ -785,32 +794,77 @@ if fetch_btn or city: # Auto-load on start if default city is present
 
                     # Display assistant response in chat message container
                     with st.chat_message("assistant"):
-                        with st.spinner("Analyzing data..."):
+                        with st.spinner("WHAIR BOT is thinking..."):
                             try:
                                 client = Groq(api_key=groq_api_key, http_client=httpx.Client())
+                                
+                                # Method 1 & 2: RAG Context Retrieval (Search Knowledge Base)
+                                rag_context = brain.search_knowledge(prompt)
+                                
+                                # Method 4: Setup Tools for Function Calling
+                                tools = get_weather_tools()
                                 
                                 system_context = f"""
                                 You are 'WHAIR BOT', an expert weather and environmental health assistant. 
                                 Location: {city}, {country}
-                                Current Weather: {current['temperature_2m']}°C, {current['relative_humidity_2m']}% humidity, {current['wind_speed_10m']} km/h wind.
+                                Current Weather: {current['temperature_2m']}°C, {current['relative_humidity_2m']}% humidity.
                                 Conditions: {get_weather_description(current['weather_code'])}
-                                Air Quality: AQI {aq_data['us_aqi'] if aq_data else 'N/A'}, PM2.5: {aq_data['pm2_5'] if aq_data else 'N/A'}.
-                                Main Pollution Source: {sorted_sources[0][0] if aq_data else 'N/A'}.
+                                Air Quality: AQI {aq_data['us_aqi'] if aq_data else 'N/A'}.
                                 
-                                Answer the user's question concisely using the data provided. 
-                                Suggest health precautions if AQI is high (>100).
+                                TECHNICAL CONTEXT (RAG):
+                                {rag_context}
+                                
+                                INSTRUCTIONS:
+                                1. Be concise and professional.
+                                2. Use tools to look up history if the user asks about trends.
+                                3. Help the user understand complex charts (SARIMAX, CPF) using the RAG context provided.
                                 """
                                 
-                                msg_history = [{"role": "system", "content": system_context}] + \
-                                              st.session_state.messages[-6:] # Keep context of last 3 turns
+                                messages = [{"role": "system", "content": system_context}] + \
+                                           st.session_state.messages[-4:]
                                 
-                                completion = client.chat.completions.create(
-                                    messages=msg_history,
-                                    model="llama-3.1-8b-instant"
+                                # Process with Tool capability
+                                response = client.chat.completions.create(
+                                    model="llama-3.1-8b-instant",
+                                    messages=messages,
+                                    tools=tools,
+                                    tool_choice="auto"
                                 )
-                                response_text = completion.choices[0].message.content
-                                st.markdown(response_text)
-                                st.session_state.messages.append({"role": "assistant", "content": response_text})
+                                
+                                response_message = response.choices[0].message
+                                
+                                # Handle Tool Calls (Method 4)
+                                if response_message.tool_calls:
+                                    for tool_call in response_message.tool_calls:
+                                        function_name = tool_call.function.name
+                                        args = json.loads(tool_call.function.arguments)
+                                        
+                                        if function_name == "get_historical_analysis":
+                                            tool_result = brain.get_historical_trends(args.get("city", city))
+                                        elif function_name == "explain_dash_component":
+                                            tool_result = brain.search_knowledge(args.get("component_name"))
+                                        else:
+                                            tool_result = "Tool not found."
+                                            
+                                        messages.append(response_message)
+                                        messages.append({
+                                            "role": "tool",
+                                            "tool_call_id": tool_call.id,
+                                            "name": function_name,
+                                            "content": tool_result
+                                        })
+                                    
+                                    # Final generation after tool results
+                                    second_response = client.chat.completions.create(
+                                        model="llama-3.1-8b-instant",
+                                        messages=messages
+                                    )
+                                    final_text = second_response.choices[0].message.content
+                                else:
+                                    final_text = response_message.content
+
+                                st.markdown(final_text)
+                                st.session_state.messages.append({"role": "assistant", "content": final_text})
                             except Exception as e:
                                 st.error(f"WHAIR BOT is currently resting: {e}")
 

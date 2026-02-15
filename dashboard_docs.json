@@ -1,0 +1,22 @@
+[
+    {
+        "topic": "SARIMAX Forecast",
+        "description": "The SARIMAX (Seasonal AutoRegressive Integrated Moving Average with eXogenous factors) plot shows the 10-day temperature forecast. The solid line is the predicted average, while the shaded area is the confidence interval based on min/max temperatures. A narrowing interval suggests high confidence, while a widening one means uncertainty is increasing."
+    },
+    {
+        "topic": "CPF Analysis",
+        "description": "The Conditional Probability Function (CPF) Percentile Rose shows which wind direction contributes most to high pollution events (top 25% of PM2.5). Each 'petal' points to the source direction. Long petals indicate a high probability of pollution coming from that specific angle."
+    },
+    {
+        "topic": "Bivariate Polar Plot",
+        "description": "This plot shows PM2.5 concentration relative to wind speed and direction. High concentrations at low wind speeds (center of the plot) suggest local sources like traffic. High concentrations at high wind speeds suggest long-range transport from distant sources."
+    },
+    {
+        "topic": "AQI Categories",
+        "description": "US AQI 0-50 is Good (Green), 51-100 is Moderate (Yellow), 101-150 is Unhealthy for Sensitive Groups (Orange), 151-200 is Unhealthy (Red), 201-300 is Very Unhealthy (Purple), and 300+ is Hazardous (Maroon)."
+    },
+    {
+        "topic": "PMF Analysis",
+        "description": "Positive Matrix Factorization (PMF) is a mathematical approach to quantify source contributions. We identify 4 main sources: Vehicular Emissions (Traffic), Industrial Activity, Dust/Construction, and Secondary Aerosols (Chemical reactions)."
+    }
+]

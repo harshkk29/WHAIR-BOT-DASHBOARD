@@ -10,3 +10,6 @@ requests-cache
 retry-requests
 groq
 httpx
+faiss-cpu
+sentence-transformers
+statsmodels
