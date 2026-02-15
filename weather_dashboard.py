@@ -12,7 +12,7 @@ import requests
 import folium
 from folium.plugins import HeatMap
 import numpy as np
-from streamlit_folium import st_folium
+from streamlit_folium import folium_static, st_folium
 from whair_bot_brain import WhairBrain, get_weather_tools
 import json
 

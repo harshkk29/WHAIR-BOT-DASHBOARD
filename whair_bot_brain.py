@@ -57,12 +57,15 @@ class WhairBrain:
 
     def log_weather_to_db(self, city, weather_data, aq_data):
         """Method 1: RAG - Build a historical library of data"""
+        if not aq_data:
+            aq_data = {}
+
         new_entry = {
             'timestamp': pd.Timestamp.now(),
             'city': city,
-            'temp': weather_data['temperature_2m'],
-            'aqi': aq_data['us_aqi'] if aq_data else None,
-            'source': aq_data.get('highest_pollutant') if aq_data else None
+            'temp': weather_data.get('temperature_2m'),
+            'aqi': aq_data.get('us_aqi'),
+            'source': aq_data.get('highest_pollutant')
         }
         
         # If source is missing, find the highest value among common pollutants
