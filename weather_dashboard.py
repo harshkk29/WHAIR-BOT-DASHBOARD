@@ -207,15 +207,31 @@ def get_air_quality_data(lat, lon):
         response = responses[0]
         current = response.Current()
         
-        return {
+        data = {
             "us_aqi": current.Variables(0).Value(),
             "pm10": current.Variables(1).Value(),
             "pm2_5": current.Variables(2).Value(),
+            "carbon_monoxide": current.Variables(3).Value(),
+            "nitrogen_dioxide": current.Variables(4).Value(),
+            "sulphur_dioxide": current.Variables(5).Value(),
+            "ozone": current.Variables(6).Value(),
             "co": current.Variables(3).Value(),
             "no2": current.Variables(4).Value(),
             "so2": current.Variables(5).Value(),
             "o3": current.Variables(6).Value()
         }
+        
+        # Pre-identify highest pollutant for logging
+        pollutants = {
+            "PM2.5": data['pm2_5'],
+            "PM10": data['pm10'],
+            "NO2": data['no2'],
+            "SO2": data['so2'],
+            "Ozone": data['o3'],
+            "CO": data['co']
+        }
+        data['highest_pollutant'] = max(pollutants, key=pollutants.get)
+        return data
     except Exception as e:
         return None
 
@@ -247,15 +263,7 @@ def perform_pmf_analysis(aq_data):
     }
     
     # Identify highest pollutant
-    pollutants = {
-        "PM2.5": aq_data.get('pm2_5', 0),
-        "PM10": aq_data.get('pm10', 0),
-        "NO2": aq_data.get('nitrogen_dioxide', 0),
-        "SO2": aq_data.get('sulphur_dioxide', 0),
-        "Ozone": aq_data.get('ozone', 0),
-        "CO": aq_data.get('carbon_monoxide', 0)
-    }
-    highest_pollutant = max(pollutants, key=pollutants.get)
+    highest_pollutant = aq_data.get('highest_pollutant', "N/A")
     
     return sources, highest_pollutant
 
