@@ -20,3 +20,6 @@ api.text
 *.zip
 *.mov
 *.csv
+
+# Project specific
+stock recomendation/
